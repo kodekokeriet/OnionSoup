@@ -1,0 +1,25 @@
+# Built-in apps and their group in the Apps tab (media = Medier,
+# settings = Innstillinger, top = straight in the Apps tab).
+# The user's own moves are kept in config/app_groups and win over this file.
+Gmu=media
+FFplay=media
+PixelReader=media
+Green=media
+Screenshots_Viewer=media
+Tweaks=settings
+ThemeSwitcher=settings
+RetroArch=settings
+PlayActivity=settings
+PackageManager=settings
+Onion_Manual=settings
+BatteryMonitorUI=settings
+Clock=settings
+OtaUpdate=settings
+Terminal=settings
+240pSuite=settings
+Guest_Mode=settings
+Expert_Mode=settings
+StartGameSwitcher=settings
+AdvanceMENU=settings
+Commander_Italic=settings
+RandomGamePicker=settings
