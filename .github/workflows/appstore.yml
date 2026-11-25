@@ -1,9 +1,16 @@
 name: App Store catalog
 on:
   workflow_dispatch:
+  schedule:
+    # Pick up new Ports-Collection releases every Monday
+    - cron: '17 4 * * 1'
   push:
     branches:
       - main
+    paths:
+      - 'appstore/**'
+      - '.github/workflows/appstore.yml'
+  pull_request:
     paths:
       - 'appstore/**'
       - '.github/workflows/appstore.yml'
@@ -18,11 +25,16 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+    - name: Build ports list from OnionUI/Ports-Collection
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: appstore/build_ports.sh ports.json
     - name: Build packages and catalog
       run: |
-        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore"
+        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json
         cat out/catalog.json
     - name: Publish to the "appstore" release
+      if: github.event_name != 'pull_request'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |

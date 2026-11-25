@@ -1,11 +1,12 @@
 #!/bin/sh
 # Build App Store packages and catalog.json from appstore/apps/<id>/.
 # Each app folder holds app.json (store metadata) plus the files that go in App/<id>/ on the SD card.
-# Usage: build_catalog.sh <out_dir> <download_base_url>
+# Usage: build_catalog.sh <out_dir> <download_base_url> [ports.json]
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 out=$1
 base=$2
+ports=${3:-}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 entries=""
@@ -19,10 +20,14 @@ for dir in "$here"/apps/*/; do
 	sha=$(sha256sum "$zip" | awk '{print $1}')
 	size=$(wc -c < "$zip" | tr -d ' ')
 	entry=$(jq -c --arg id "$id" --arg url "$base/$id.zip" --arg sha "$sha" --argjson size "$size" \
-		'. + {id: $id, url: $url, sha256: $sha, size: $size}' "$dir/app.json")
+		'. + {id: $id, type: "app", url: $url, sha256: $sha, size: $size}' "$dir/app.json")
 	entries="$entries$entry
 "
 	echo "packaged $id ($size bytes)" >&2
 done
-printf '%s' "$entries" | jq -s '{version: 1, apps: (. | sort_by(.name))}' > "$out/catalog.json"
+if [ -n "$ports" ]; then
+	printf '%s' "$entries" | jq -s --slurpfile p "$ports" '{version: 1, apps: ((. | sort_by(.name)) + $p[0])}' > "$out/catalog.json"
+else
+	printf '%s' "$entries" | jq -s '{version: 1, apps: (. | sort_by(.name))}' > "$out/catalog.json"
+fi
 echo "wrote $out/catalog.json" >&2

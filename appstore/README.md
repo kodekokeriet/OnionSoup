@@ -27,6 +27,19 @@ Katalogen bygges automatisk fra denne mappen.
 
 For å øke versjonen endrer du `version` i `app.json`. Da viser App Store `[update]` på enheter som har en eldre versjon.
 
+## Porter fra Ports-Collection
+
+Alle portene i [OnionUI/Ports-Collection](https://github.com/OnionUI/Ports-Collection) havner automatisk i App Store.
+`build_ports.sh` leser den siste releasen der og lager én oppføring per port. Den originale `.7z`-filen lastes ned
+direkte fra Ports-Collection og pakkes ut på roten av SD-kortet, akkurat som når du installerer manuelt.
+
+- **Ports (free)**: komplette og gratis porter.
+- **Ports (own game files)**: bare motoren. Du må selv legge inn originale spillfiler (se `_required_files.txt`).
+
+Workflowen kjører hver mandag, så nye porter dukker opp av seg selv. App Store husker hvilke filer hver port
+installerte, og når du fjerner en port, beholdes filer som andre installerte porter også bruker.
+På enheten må «Ports Collection» være slått på i Package Manager.
+
 ## Test lokalt
 
 ```sh

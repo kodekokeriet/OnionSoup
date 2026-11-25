@@ -74,19 +74,37 @@ fetch_catalog() {
 	fi
 }
 
-# Version of an installed app, empty if not installed by the App Store
+installed_dir=$workdir/installed
+
+# Version of an installed app or port, empty if not installed by the App Store
 installed_version() {
-	cat "$appdir/$1/.appstore_version" 2> /dev/null
+	case "$1" in
+		port-*) cat "$installed_dir/$1.version" 2> /dev/null ;;
+		*) cat "$appdir/$1/.appstore_version" 2> /dev/null ;;
+	esac
+}
+
+# Menu group of a catalog entry
+group_of() {
+	jq -r --arg id "$1" '.apps[] | select(.id == $id) | if .type == "port" then .category else "Apps" end' "$catalog"
 }
 
 app_field() {
 	jq -r --arg id "$1" --arg f "$2" '.apps[] | select(.id == $id) | .[$f] // empty' "$catalog"
 }
 
-# One line per app: "<id>|<label>"
+# Groups present in the catalog, apps first
+group_lines() {
+	jq -r '[.apps[] | if .type == "port" then .category else "Apps" end] | unique | sort_by(. != "Apps") | .[]' "$catalog"
+}
+
+# One line per entry in group $1: "<id>|<label>"
 app_lines() {
 	model=$(device_model)
-	jq -r --arg m "$model" '.apps[] | select(($m == "") or (.devices == null) or (.devices | index($m))) | .id + "|" + .name + "|" + .version' "$catalog" |
+	jq -r --arg m "$model" --arg g "$1" '.apps[]
+		| select((if .type == "port" then .category else "Apps" end) == $g)
+		| select(($m == "") or (.devices == null) or (.devices | index($m)))
+		| .id + "|" + .name + "|" + .version' "$catalog" |
 		while IFS='|' read -r id name version; do
 			inst=$(installed_version "$id")
 			if [ "$inst" = "" ]; then
@@ -100,11 +118,90 @@ app_lines() {
 		done
 }
 
+download_verified() {
+	id=$1
+	out=$2
+	url=$(app_field "$id" url)
+	sha=$(app_field "$id" sha256)
+	size=$(app_field "$id" size)
+	need_mb=$(((${size:-0} * 3) / 1048576 + 20))
+	free_mb=$(df -m "$SDCARD" 2> /dev/null | awk 'NR==2{print $4}')
+	if [ -n "$free_mb" ] && [ "$free_mb" -lt "$need_mb" ]; then
+		die "Not enough space on the SD card (${need_mb}MB needed)."
+	fi
+	curl -k -L -f -# -o "$out" "$url" || {
+		rm -f "$out"
+		die "Download failed."
+	}
+	if [ "$(sha256_of "$out")" != "$sha" ]; then
+		rm -f "$out"
+		die "Checksum mismatch, the download is corrupt."
+	fi
+}
+
+install_port() {
+	id=$1
+	name=$(app_field "$id" name)
+	version=$(app_field "$id" version)
+	archive="$workdir/$id.7z"
+
+	if [ ! -d "$SDCARD/Emu/PORTS" ]; then
+		die "Ports are not enabled.\nOpen Package Manager and install\n\"Ports Collection\" first."
+	fi
+
+	echo -e "\n${BLUE}Downloading $name...${NC}"
+	download_verified "$id" "$archive"
+
+	echo "Installing..."
+	mkdir -p "$installed_dir"
+	7z l -slt "$archive" | awk -F' = ' '
+		/^Path = / { path = $2 }
+		/^Attributes = / { if (path != "" && index($2, "D") != 1) print path; path = "" }
+	' > "$installed_dir/$id.files.tmp"
+	if ! 7z x -aoa -y -o"$SDCARD" "$archive" > /dev/null 2>&1; then
+		rm -f "$archive" "$installed_dir/$id.files.tmp"
+		die "Could not unpack the port."
+	fi
+	mv "$installed_dir/$id.files.tmp" "$installed_dir/$id.files"
+	echo -n "$version" > "$installed_dir/$id.version"
+	rm -f "$archive"
+	echo -e "${GREEN}$name installed.${NC}"
+	if [ "$(app_field "$id" requires_game_files)" = "true" ]; then
+		echo -e "\n${YELLOW}This port needs the original game files.${NC}"
+		echo "See _required_files.txt in Roms/PORTS/Games/."
+	fi
+	echo -e "\nOpen Ports and run \"~Import ports\" to\nadd it to the game list."
+	pause
+}
+
+# Remove the files a port installed, keeping files that another installed port also uses
+remove_port() {
+	id=$1
+	list="$installed_dir/$id.files"
+	[ -f "$list" ] || return
+	others=$(ls "$installed_dir"/*.files 2> /dev/null | grep -vxF "$list")
+	while IFS= read -r f; do
+		case "$f" in
+			"" | /* | *..*) continue ;;
+		esac
+		if [ -n "$others" ] && grep -qxF -- "$f" $others 2> /dev/null; then
+			continue
+		fi
+		rm -f "$SDCARD/$f"
+		d=$(dirname "$f")
+		while [ "$d" != "." ] && [ "$d" != "Roms" ] && [ "$d" != "Roms/PORTS" ]; do
+			rmdir "$SDCARD/$d" 2> /dev/null || break
+			d=$(dirname "$d")
+		done
+	done < "$list"
+	rm -f "$list" "$installed_dir/$id.version"
+	echo -e "${GREEN}Removed.${NC}"
+	pause
+}
+
 install_app() {
 	id=$1
 	name=$(app_field "$id" name)
-	url=$(app_field "$id" url)
-	sha=$(app_field "$id" sha256)
 	version=$(app_field "$id" version)
 	zip="$workdir/$id.zip"
 
@@ -113,15 +210,7 @@ install_app() {
 	esac
 
 	echo -e "\n${BLUE}Downloading $name $version...${NC}"
-	curl -k -L -f -# -o "$zip" "$url" || {
-		rm -f "$zip"
-		die "Download failed."
-	}
-
-	if [ "$(sha256_of "$zip")" != "$sha" ]; then
-		rm -f "$zip"
-		die "Checksum mismatch, the download is corrupt."
-	fi
+	download_verified "$id" "$zip"
 
 	echo "Installing..."
 	tmp="$workdir/extract-$id"
@@ -182,8 +271,18 @@ show_app() {
 	action=$(echo -e "$choices" | $SHELLECT -t "$name" -b "Press A to choose")
 	clear
 	case "$action" in
-		Install | Update | Reinstall) install_app "$id" ;;
-		Remove) remove_app "$id" ;;
+		Install | Update | Reinstall)
+			case "$id" in
+				port-*) install_port "$id" ;;
+				*) install_app "$id" ;;
+			esac
+			;;
+		Remove)
+			case "$id" in
+				port-*) remove_port "$id" ;;
+				*) remove_app "$id" ;;
+			esac
+			;;
 	esac
 }
 
@@ -200,11 +299,24 @@ main() {
 	fetch_catalog
 
 	while true; do
-		lines=$(app_lines)
-		[ "$lines" = "" ] && die "No apps available for this device."
-		choice=$( (echo "$lines" | cut -d'|' -f2-; echo "Exit") | $SHELLECT -t "App Store" -b "A: open  B: exit")
+		group=$( (group_lines; echo "Exit") | $SHELLECT -t "App Store" -b "A: open  B: exit")
 		clear
-		[ "$choice" = "" ] || [ "$choice" = "Exit" ] && break
+		[ "$group" = "" ] || [ "$group" = "Exit" ] && break
+		browse_group "$group"
+	done
+}
+
+browse_group() {
+	while true; do
+		lines=$(app_lines "$1")
+		if [ "$lines" = "" ]; then
+			echo "Nothing available for this device."
+			pause
+			return
+		fi
+		choice=$( (echo "$lines" | cut -d'|' -f2-; echo "Back") | $SHELLECT -t "$1" -b "A: open  B: back")
+		clear
+		[ "$choice" = "" ] || [ "$choice" = "Back" ] && return
 		id=$(echo "$lines" | while IFS='|' read -r i label; do
 			[ "$label" = "$choice" ] && echo "$i" && break
 		done)
