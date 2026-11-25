@@ -10,9 +10,10 @@ while :; do
 	"$appdir/jellyfin"
 	[ $? -eq 10 ] || break
 	url=$(cat /tmp/jellyfin_play 2> /dev/null)
-	rm -f /tmp/jellyfin_play
+	headers=$(cat /tmp/jellyfin_headers 2> /dev/null)
+	rm -f /tmp/jellyfin_play /tmp/jellyfin_headers
 	[ -n "$url" ] || break
 	echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
-	./bin/ffplay -autoexit -vf "hflip,vflip" -i "$url"
+	./bin/ffplay -autoexit -vf "hflip,vflip" -headers "$headers" -i "$url"
 done
 rm -f /tmp/stay_awake

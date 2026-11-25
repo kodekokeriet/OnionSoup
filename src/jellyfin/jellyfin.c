@@ -12,7 +12,7 @@
 //
 // Environment overrides for testing on a PC:
 //   SDCARD, JF_FONT, JF_CURL (curl binary), JF_PLAYER (audio player command),
-//   JF_KEYBOARD_INPUT (text the on-screen keyboard "types"),
+//   JF_KEYBOARD_INPUT (answers the on-screen keyboard "types", split by '|'),
 //   JF_SCRIPT (scripted input, e.g. "D A wait:500 shot:out.bmp")
 
 #include <arpa/inet.h>
@@ -20,6 +20,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -35,9 +36,27 @@
 #else
 static const char *launch_keyboard(const char *initial, const char *title)
 {
+    // Host stub: JF_KEYBOARD_INPUT holds answers separated by '|'
     (void)title;
+    static char buf[256];
+    static int n = 0;
     const char *t = getenv("JF_KEYBOARD_INPUT");
-    return t ? t : initial;
+    if (!t)
+        return initial;
+    for (int i = 0; i < n && t; i++) {
+        t = strchr(t, '|');
+        if (t)
+            t++;
+    }
+    n++;
+    if (!t)
+        return initial;
+    size_t l = strcspn(t, "|");
+    if (l >= sizeof(buf))
+        l = sizeof(buf) - 1;
+    memcpy(buf, t, l);
+    buf[l] = '\0';
+    return buf;
 }
 #endif
 
@@ -134,10 +153,12 @@ static void show_message(const char *t, Uint32 ms)
     message_until = SDL_GetTicks() + ms;
 }
 
-static void auth_header(char *out, size_t n)
+// Value for the Authorization header. Jellyfin 10.11 can turn off the legacy
+// X-Emby-Authorization header and api_key parameter, so we send both styles.
+static void auth_value(char *out, size_t n)
 {
     snprintf(out, n,
-             "X-Emby-Authorization: MediaBrowser Client=\"OnionSoup\", Device=\"Miyoo Mini+\", "
+             "MediaBrowser Client=\"OnionSoup\", Device=\"Miyoo Mini+\", "
              "DeviceId=\"%s\", Version=\"%s\"%s%s%s",
              device_id, APP_VERSION, *token ? ", Token=\"" : "", token, *token ? "\"" : "");
 }
@@ -157,12 +178,45 @@ static void mkdir_p(const char *path)
 
 /* ---------- HTTP via curl ---------- */
 
+static int last_http = 0;
+
+// Append a line to the app log. Never log passwords or tokens.
+static void jf_log(const char *fmt, ...)
+{
+    char path[400];
+    snprintf(path, sizeof(path), "%s/jellyfin.log", workdir);
+    FILE *f = fopen(path, "a");
+    if (!f)
+        return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputc('\n', f);
+    fclose(f);
+}
+
+// Remove leading/trailing whitespace and newlines (from the keyboard).
+static void trim(char *s)
+{
+    size_t l = strlen(s);
+    while (l && (s[l - 1] == '\n' || s[l - 1] == '\r' || s[l - 1] == ' ' || s[l - 1] == '\t'))
+        s[--l] = '\0';
+    size_t i = 0;
+    while (s[i] == ' ' || s[i] == '\t')
+        i++;
+    if (i)
+        memmove(s, s + i, l - i + 1);
+}
+
 // Run curl with the given arguments and return its stdout (malloc'd), or NULL.
 static char *curl_capture(const char *method, const char *path, const char *body, int timeout_s)
 {
-    char url[600], auth[400], tmo[16];
+    char url[600], val[360], auth[400], legacy[420], tmo[16];
     snprintf(url, sizeof(url), "%s%s", server_url, path);
-    auth_header(auth, sizeof(auth));
+    auth_value(val, sizeof(val));
+    snprintf(auth, sizeof(auth), "Authorization: %s", val);
+    snprintf(legacy, sizeof(legacy), "X-Emby-Authorization: %s", val);
     snprintf(tmo, sizeof(tmo), "%d", timeout_s);
 
     int fds[2];
@@ -180,13 +234,16 @@ static char *curl_capture(const char *method, const char *path, const char *body
         argv[a++] = curl_bin;
         argv[a++] = "-s";
         argv[a++] = "-k";
-        argv[a++] = "-f";
+        argv[a++] = "-w";
+        argv[a++] = "\n%{http_code}";
         argv[a++] = "-m";
         argv[a++] = tmo;
         argv[a++] = "-X";
         argv[a++] = method;
         argv[a++] = "-H";
         argv[a++] = auth;
+        argv[a++] = "-H";
+        argv[a++] = legacy;
         argv[a++] = "-H";
         argv[a++] = "Content-Type: application/json";
         if (body) {
@@ -221,7 +278,16 @@ static char *curl_capture(const char *method, const char *path, const char *body
     if (!buf)
         return NULL;
     buf[len] = '\0';
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+    // The last line is the HTTP status code added by -w
+    last_http = 0;
+    char *nl = strrchr(buf, '\n');
+    if (nl) {
+        last_http = atoi(nl + 1);
+        *nl = '\0';
+    }
+    int code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    if (code != 0 || last_http < 200 || last_http >= 300) {
+        jf_log("%s %s -> curl %d, http %d", method, path, code, last_http);
         free(buf);
         return NULL;
     }
@@ -414,9 +480,15 @@ static void password_login(void)
 {
     char user[96], pass[128];
     copy_str(user, sizeof(user), launch_keyboard(user_name, "Brukernavn"));
+    trim(user);
     if (!*user)
         return;
     copy_str(pass, sizeof(pass), launch_keyboard("", "Passord"));
+    // Only the password is not trimmed of inner spaces; strip a stray newline.
+    size_t pl = strlen(pass);
+    while (pl && (pass[pl - 1] == '\n' || pass[pl - 1] == '\r'))
+        pass[--pl] = '\0';
+    jf_log("password login: user length %d, password length %d", (int)strlen(user), (int)pl);
     cJSON *b = cJSON_CreateObject();
     cJSON_AddStringToObject(b, "Username", user);
     cJSON_AddStringToObject(b, "Pw", pass);
@@ -427,8 +499,12 @@ static void password_login(void)
     free(body);
     if (ok)
         load_views();
-    else
+    else if (last_http == 401)
         copy_str(login_error, sizeof(login_error), "Feil brukernavn eller passord.");
+    else if (last_http == 0)
+        copy_str(login_error, sizeof(login_error), "Fikk ikke kontakt med serveren.");
+    else
+        snprintf(login_error, sizeof(login_error), "Serveren svarte med feil %d.", last_http);
 }
 
 static void choose_server(const char *address)
@@ -642,8 +718,11 @@ static void request_image(Item *it)
     if (img_pid > 0)
         return;
     char url[600];
-    snprintf(url, sizeof(url), "%s/Items/%s/Images/Primary?fillWidth=180&fillHeight=253&format=Png&quality=85&api_key=%s",
-             server_url, it->id, token);
+    snprintf(url, sizeof(url), "%s/Items/%s/Images/Primary?fillWidth=180&fillHeight=253&format=Png&quality=85&api_key=%s&ApiKey=%s",
+             server_url, it->id, token, token);
+    char auth[400], val[360];
+    auth_value(val, sizeof(val));
+    snprintf(auth, sizeof(auth), "Authorization: %s", val);
     it->img_state = 1;
     img_item = it;
     img_pid = fork();
@@ -657,7 +736,7 @@ static void request_image(Item *it)
         snprintf(tmp, sizeof(tmp), "%s.tmp", p);
         pid_t c = fork();
         if (c == 0) {
-            execlp(curl_bin, curl_bin, "-s", "-k", "-f", "-m", "20", "-o", tmp, url, (char *)NULL);
+            execlp(curl_bin, curl_bin, "-s", "-k", "-f", "-m", "20", "-H", auth, "-o", tmp, url, (char *)NULL);
             _exit(127);
         }
         int st = 0;
@@ -719,8 +798,11 @@ static void music_play(Level *lv, int index)
     copy_str(music_title, sizeof(music_title), it->name);
     copy_str(music_artist, sizeof(music_artist), lv->title);
     char url[600];
-    snprintf(url, sizeof(url), "%s/Audio/%s/stream.mp3?api_key=%s&AudioCodec=mp3&AudioBitrate=192000&Static=false&DeviceId=%s",
-             server_url, it->id, token, device_id);
+    snprintf(url, sizeof(url), "%s/Audio/%s/stream.mp3?api_key=%s&ApiKey=%s&AudioCodec=mp3&AudioBitrate=192000&Static=false&DeviceId=%s",
+             server_url, it->id, token, token, device_id);
+    char headers[420], val[360];
+    auth_value(val, sizeof(val));
+    snprintf(headers, sizeof(headers), "Authorization: %s\r\n", val);
     const char *player = getenv("JF_PLAYER");
     music_pid = fork();
     if (music_pid == 0) {
@@ -733,7 +815,8 @@ static void music_play(Level *lv, int index)
         if (player)
             execl("/bin/sh", "sh", "-c", player, "player", url, (char *)NULL);
         else
-            execl("./bin/ffplay", "ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", url, (char *)NULL);
+            execl("./bin/ffplay", "ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", "-headers", headers, "-i", url,
+                  (char *)NULL);
         _exit(127);
     }
 }
@@ -758,11 +841,18 @@ static void play_video(Item *it)
     music_stop();
     char url[800];
     snprintf(url, sizeof(url),
-             "%s/Videos/%s/stream.ts?api_key=%s&VideoCodec=h264&AudioCodec=mp3&MaxWidth=640&MaxHeight=480"
+             "%s/Videos/%s/stream.ts?api_key=%s&ApiKey=%s&VideoCodec=h264&AudioCodec=mp3&MaxWidth=640&MaxHeight=480"
              "&VideoBitrate=1000000&AudioBitrate=128000&AudioChannels=2&TranscodingMaxAudioChannels=2"
              "&h264-profile=baseline&h264-level=30&Static=false&MediaSourceId=%s&DeviceId=%s",
-             server_url, it->id, token, it->id, device_id);
-    FILE *fp = fopen("/tmp/jellyfin_play", "w");
+             server_url, it->id, token, token, it->id, device_id);
+    FILE *fp = fopen("/tmp/jellyfin_headers", "w");
+    if (fp) {
+        char val[360];
+        auth_value(val, sizeof(val));
+        fprintf(fp, "Authorization: %s\r\n", val);
+        fclose(fp);
+    }
+    fp = fopen("/tmp/jellyfin_play", "w");
     if (!fp) {
         show_message("Kunne ikke starte avspilling", 3000);
         return;
@@ -944,7 +1034,10 @@ static void draw_login(void)
         Uint32 t2 = SDL_GetTicks() / 400 % 4;
         char wait[40];
         snprintf(wait, sizeof(wait), "Venter på godkjenning%.*s", (int)t2, "...");
-        text(f15, wait, 60, TOP_H + 290, C_GREY);
+        if (*login_error)
+            text_fit(f15, login_error, 60, TOP_H + 290, SCREEN_W - 120, C_RED);
+        else
+            text(f15, wait, 60, TOP_H + 290, C_GREY);
         text_fit(f13, server_url, 60, TOP_H + 316, SCREEN_W - 120, C_GREY);
     }
     else {
