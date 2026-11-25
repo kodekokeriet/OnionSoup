@@ -37,4 +37,8 @@ Søke og spille YouTube-video på Mini+.
 - Risiko: tredjeparts-API-er endrer seg ofte, så appen må kunne bytte instans.
 
 ### MiiPC
-Integrere MiiPC fra det andre prosjektet. Omfang og hvordan det skal kobles inn avklares.
+Musikkapp inspirert av Akai MPC, fra det andre prosjektet. Skal kjøre native på Miyoo.
+- Pads på knappene (D-pad + ABXY + skulderknapper, med bank-veksling på SELECT), sampler fra SD-kortet, enkel sequencer med tempo og mønstre.
+- Bygges i C med SDL og SDL_mixer via verktøykjeden, basert på native app-malen.
+- Lav lydforsinkelse er viktig: små lydbuffere og forhåndslastede samples (WAV, 16-bit mono) fordi minnet er begrenset (128 MB).
+- Distribueres gjennom App Store.
