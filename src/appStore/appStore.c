@@ -76,7 +76,11 @@ typedef struct {
     SDL_Surface *img_card, *img_shelf, *img_hero, *img_detail;
 } Item;
 
-typedef enum { TAB_FEATURED, TAB_APPS, TAB_PORTS, TAB_INSTALLED, TAB_COUNT } Tab;
+typedef enum { TAB_FEATURED,
+               TAB_APPS,
+               TAB_PORTS,
+               TAB_INSTALLED,
+               TAB_COUNT } Tab;
 static const char *TAB_NAMES[TAB_COUNT] = {"Utvalgt", "Apper", "Porter", "Installert"};
 
 static Item items[MAX_ITEMS];
@@ -88,10 +92,10 @@ static TTF_Font *f13, *f15, *f17, *f19, *f24, *f34;
 
 // UI state
 static Tab tab = TAB_FEATURED;
-static int sel = 0, scroll_row = 0;         // grid tabs
-static int feat_row = 0, feat_col = 0;      // featured tab: row 0 = hero, 1 = free ports, 2 = apps
+static int sel = 0, scroll_row = 0;    // grid tabs
+static int feat_row = 0, feat_col = 0; // featured tab: row 0 = hero, 1 = free ports, 2 = apps
 static int feat_scroll = 0;
-static int detail = -1;                     // item index shown in detail view, -1 = none
+static int detail = -1; // item index shown in detail view, -1 = none
 static int hero = -1;
 
 // background job (install/remove/fetch)
@@ -750,7 +754,8 @@ static void draw_grid(void)
 {
     int list[MAX_ITEMS];
     int n = tab_list(tab, list);
-    const char *title = tab == TAB_APPS ? "Apper" : tab == TAB_PORTS ? "Porter" : "Installert";
+    const char *title = tab == TAB_APPS ? "Apper" : tab == TAB_PORTS ? "Porter"
+                                                                     : "Installert";
     text(f19, title, 24, TOP_H + 8, C_WHITE);
     char count[32];
     snprintf(count, sizeof(count), "%d", n);
@@ -1061,8 +1066,7 @@ static bool run_script_step(void)
     static const struct {
         const char *name;
         SDLKey key;
-    } keys[] = {{"U", SW_BTN_UP}, {"D", SW_BTN_DOWN}, {"L", SW_BTN_LEFT}, {"R", SW_BTN_RIGHT},
-                {"A", SW_BTN_A}, {"B", SW_BTN_B}, {"Y", SW_BTN_Y}, {"L1", SW_BTN_L1}, {"R1", SW_BTN_R1}};
+    } keys[] = {{"U", SW_BTN_UP}, {"D", SW_BTN_DOWN}, {"L", SW_BTN_LEFT}, {"R", SW_BTN_RIGHT}, {"A", SW_BTN_A}, {"B", SW_BTN_B}, {"Y", SW_BTN_Y}, {"L1", SW_BTN_L1}, {"R1", SW_BTN_R1}};
     if (!strncmp(tok, "shot:", 5)) {
         draw();
         save_shot(tok + 5);
