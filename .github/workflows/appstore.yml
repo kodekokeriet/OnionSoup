@@ -25,10 +25,12 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+    - name: Install Pillow
+      run: pip install --quiet pillow
     - name: Build ports list from OnionUI/Ports-Collection
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: appstore/build_ports.sh ports.json
+      run: appstore/build_ports.sh ports.json out "https://github.com/${{ github.repository }}/releases/download/appstore"
     - name: Build packages and catalog
       run: |
         appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json

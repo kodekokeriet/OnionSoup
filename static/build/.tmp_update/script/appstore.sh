@@ -3,6 +3,13 @@
 #
 # The catalog is a JSON file built by .github/workflows/appstore.yml from appstore/apps/.
 # Environment overrides (used by tests): SDCARD, APPSTORE_CATALOG_URL, APPSTORE_NO_NET, SHELLECT
+#
+# Without arguments it runs a terminal menu. The graphical App Store (bin/appStore) uses the
+# commands below instead and reads progress from $workdir/status ("<state> <percent> <text>"):
+#   appstore.sh fetch            enable wifi and download the catalog
+#   appstore.sh install <id>     download, verify and install an app or port
+#   appstore.sh remove <id>      remove an app or port installed by the App Store
+#   appstore.sh image <id>       download the cover image to $workdir/img/<id>.png
 
 SDCARD=${SDCARD:-/mnt/SDCARD}
 sysdir=$SDCARD/.tmp_update
@@ -19,13 +26,25 @@ YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 NC='\033[0m'
 
+status_file=$workdir/status
+batch=0
+
+status() {
+	[ "$batch" = "1" ] && echo "$1" > "$status_file"
+}
+
 pause() {
+	[ "$batch" = "1" ] && return
 	echo -ne "${YELLOW}"
 	read -n 1 -s -r -p "${1:-Press A to continue}"
 	echo -ne "${NC}"
 }
 
 die() {
+	if [ "$batch" = "1" ]; then
+		echo "error 0 $(echo -e "$1" | tr '\n' ' ')" > "$status_file"
+		exit 1
+	fi
 	echo -e "${RED}$1${NC}"
 	pause "Press A to exit"
 	exit 1
@@ -124,15 +143,33 @@ download_verified() {
 	url=$(app_field "$id" url)
 	sha=$(app_field "$id" sha256)
 	size=$(app_field "$id" size)
+	[ -n "$url" ] || die "Unknown app: $id"
 	need_mb=$(((${size:-0} * 3) / 1048576 + 20))
 	free_mb=$(df -m "$SDCARD" 2> /dev/null | awk 'NR==2{print $4}')
 	if [ -n "$free_mb" ] && [ "$free_mb" -lt "$need_mb" ]; then
 		die "Not enough space on the SD card (${need_mb}MB needed)."
 	fi
-	curl -k -L -f -# -o "$out" "$url" || {
+	if [ "$batch" = "1" ]; then
 		rm -f "$out"
-		die "Download failed."
-	}
+		curl -k -L -f -s -o "$out" "$url" &
+		pid=$!
+		while kill -0 $pid 2> /dev/null; do
+			got=0
+			[ -f "$out" ] && got=$(wc -c < "$out")
+			[ "${size:-0}" -gt 0 ] && status "download $((got * 100 / size)) Downloading"
+			sleep 1
+		done
+		wait $pid || {
+			rm -f "$out"
+			die "Download failed."
+		}
+		status "verify 100 Checking"
+	else
+		curl -k -L -f -# -o "$out" "$url" || {
+			rm -f "$out"
+			die "Download failed."
+		}
+	fi
 	if [ "$(sha256_of "$out")" != "$sha" ]; then
 		rm -f "$out"
 		die "Checksum mismatch, the download is corrupt."
@@ -153,6 +190,7 @@ install_port() {
 	download_verified "$id" "$archive"
 
 	echo "Installing..."
+	status "install 100 Installing"
 	mkdir -p "$installed_dir"
 	7z l -slt "$archive" | awk -F' = ' '
 		/^Path = / { path = $2 }
@@ -166,6 +204,7 @@ install_port() {
 	echo -n "$version" > "$installed_dir/$id.version"
 	rm -f "$archive"
 	echo -e "${GREEN}$name installed.${NC}"
+	status "done 100 Installed"
 	if [ "$(app_field "$id" requires_game_files)" = "true" ]; then
 		echo -e "\n${YELLOW}This port needs the original game files.${NC}"
 		echo "See _required_files.txt in Roms/PORTS/Games/."
@@ -196,6 +235,7 @@ remove_port() {
 	done < "$list"
 	rm -f "$list" "$installed_dir/$id.version"
 	echo -e "${GREEN}Removed.${NC}"
+	status "done 100 Removed"
 	pause
 }
 
@@ -213,6 +253,7 @@ install_app() {
 	download_verified "$id" "$zip"
 
 	echo "Installing..."
+	status "install 100 Installing"
 	tmp="$workdir/extract-$id"
 	rm -rf "$tmp"
 	mkdir -p "$tmp"
@@ -232,6 +273,7 @@ install_app() {
 	echo -n "$version" > "$appdir/$id/.appstore_version"
 	rm -f "$zip"
 	echo -e "${GREEN}$name $version installed.${NC}"
+	status "done 100 Installed"
 	pause
 }
 
@@ -244,6 +286,7 @@ remove_app() {
 		rm -rf "$appdir/$id"
 		echo -e "${GREEN}Removed.${NC}"
 	fi
+	status "done 100 Removed"
 	pause
 }
 
@@ -290,12 +333,7 @@ main() {
 	clear
 	echo -e "${BLUE}===== OnionSoup App Store =====${NC}\n"
 
-	if [ "$APPSTORE_NO_NET" != "1" ]; then
-		if [ "$(device_model)" = "283" ]; then
-			die "The App Store needs WiFi (Miyoo Mini+).\nOn the Miyoo Mini, copy app folders\nto App/ on the SD card instead."
-		fi
-		enable_wifi
-	fi
+	prepare_network
 	fetch_catalog
 
 	while true; do
@@ -324,4 +362,65 @@ browse_group() {
 	done
 }
 
-[ "$APPSTORE_SOURCE_ONLY" = "1" ] || main
+prepare_network() {
+	if [ "$APPSTORE_NO_NET" != "1" ]; then
+		if [ "$(device_model)" = "283" ]; then
+			die "The App Store needs WiFi (Miyoo Mini+).\nOn the Miyoo Mini, copy app folders\nto App/ on the SD card instead."
+		fi
+		enable_wifi > /dev/null 2>&1
+	fi
+}
+
+fetch_image() {
+	id=$1
+	case "$id" in
+		*/* | .* | "") exit 1 ;;
+	esac
+	mkdir -p "$workdir/img"
+	dest="$workdir/img/$id.png"
+	[ -s "$dest" ] && exit 0
+	url=$(app_field "$id" image)
+	[ -n "$url" ] || exit 1
+	curl -k -L -f -s -o "$dest.tmp" "$url" && mv "$dest.tmp" "$dest" || {
+		rm -f "$dest.tmp"
+		exit 1
+	}
+}
+
+run_command() {
+	batch=1
+	mkdir -p "$workdir"
+	case "$1" in
+		fetch)
+			status "fetch 0 Connecting"
+			prepare_network
+			fetch_catalog > /dev/null
+			status "done 100 Ready"
+			;;
+		install)
+			case "$2" in
+				port-*) install_port "$2" > /dev/null ;;
+				*) install_app "$2" > /dev/null ;;
+			esac
+			;;
+		remove)
+			case "$2" in
+				port-*) remove_port "$2" > /dev/null ;;
+				*) remove_app "$2" > /dev/null ;;
+			esac
+			;;
+		image) fetch_image "$2" ;;
+		*)
+			echo "unknown command: $1" >&2
+			exit 2
+			;;
+	esac
+}
+
+if [ "$APPSTORE_SOURCE_ONLY" != "1" ]; then
+	if [ $# -gt 0 ]; then
+		run_command "$@"
+	else
+		main
+	fi
+fi

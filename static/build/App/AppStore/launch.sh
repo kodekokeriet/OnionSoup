@@ -1,7 +1,11 @@
 #!/bin/sh
-scriptdir=/mnt/SDCARD/.tmp_update/script
+sysdir=/mnt/SDCARD/.tmp_update
 
 touch /tmp/stay_awake
-cd $scriptdir
-st -q -e sh $scriptdir/appstore.sh
+cd $sysdir
+if [ -x ./bin/appStore ]; then
+	./bin/appStore
+else
+	st -q -e sh $sysdir/script/appstore.sh
+fi
 rm -f /tmp/stay_awake

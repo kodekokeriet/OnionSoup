@@ -16,11 +16,16 @@ for dir in "$here"/apps/*/; do
 	[ -f "$dir/config.json" ] || { echo "error: $id has no config.json" >&2; exit 1; }
 	zip="$out/$id.zip"
 	rm -f "$zip"
-	(cd "$dir" && zip -q -r -X "$zip" . -x app.json)
+	(cd "$dir" && zip -q -r -X "$zip" . -x app.json -x cover.png)
+	image=""
+	if [ -f "$dir/cover.png" ]; then
+		python3 "$here/thumb.py" "$dir/cover.png" "$out/app-$id.png"
+		image="$base/app-$id.png"
+	fi
 	sha=$(sha256sum "$zip" | awk '{print $1}')
 	size=$(wc -c < "$zip" | tr -d ' ')
-	entry=$(jq -c --arg id "$id" --arg url "$base/$id.zip" --arg sha "$sha" --argjson size "$size" \
-		'. + {id: $id, type: "app", url: $url, sha256: $sha, size: $size}' "$dir/app.json")
+	entry=$(jq -c --arg id "$id" --arg url "$base/$id.zip" --arg sha "$sha" --argjson size "$size" --arg image "$image" \
+		'. + {id: $id, type: "app", url: $url, sha256: $sha, size: $size} + (if $image != "" then {image: $image} else {} end)' "$dir/app.json")
 	entries="$entries$entry
 "
 	echo "packaged $id ($size bytes)" >&2
