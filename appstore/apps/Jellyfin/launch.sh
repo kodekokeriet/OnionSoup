@@ -10,7 +10,7 @@ while :; do
 	"$appdir/jellyfin"
 	[ $? -eq 10 ] || break
 	url=$(cat /tmp/jellyfin_play 2> /dev/null)
-	headers=$(cat /tmp/jellyfin_headers 2> /dev/null)
+	headers=$(tr -d "\r\n" < /tmp/jellyfin_headers 2> /dev/null)
 	rm -f /tmp/jellyfin_play /tmp/jellyfin_headers
 	[ -n "$url" ] || break
 	echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
