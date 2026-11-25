@@ -16,7 +16,7 @@ for dir in "$here"/apps/*/; do
 	[ -f "$dir/config.json" ] || { echo "error: $id has no config.json" >&2; exit 1; }
 	zip="$out/$id.zip"
 	rm -f "$zip"
-	(cd "$dir" && zip -q -r -X "$zip" . -x app.json -x cover.png)
+	(cd "$dir" && zip -q -r -X "$zip" . -x app.json -x cover.png -x build.sh)
 	image=""
 	if [ -f "$dir/cover.png" ]; then
 		python3 "$here/thumb.py" "$dir/cover.png" "$out/app-$id.png"

@@ -9,10 +9,14 @@ on:
       - main
     paths:
       - 'appstore/**'
+      - 'src/jellyfin/**'
+      - 'src/common/soup/**'
       - '.github/workflows/appstore.yml'
   pull_request:
     paths:
       - 'appstore/**'
+      - 'src/jellyfin/**'
+      - 'src/common/soup/**'
       - '.github/workflows/appstore.yml'
 
 permissions:
@@ -31,6 +35,11 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: appstore/build_ports.sh ports.json out "https://github.com/${{ github.repository }}/releases/download/appstore"
+    - name: Build native apps (Miyoo toolchain)
+      run: |
+        docker run --rm -v "$PWD":/w -w /w aemiii91/miyoomini-toolchain:latest bash -c \
+          'source /root/.bashrc; set -e; for b in appstore/apps/*/build.sh; do echo "== $b"; sh "$b"; done'
+        sudo chown -R "$(id -u):$(id -g)" .
     - name: Build packages and catalog
       run: |
         appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json
