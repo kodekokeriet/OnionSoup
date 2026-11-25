@@ -849,7 +849,9 @@ static void play_video(Item *it)
     if (fp) {
         char val[360];
         auth_value(val, sizeof(val));
-        fprintf(fp, "Authorization: %s\r\n", val);
+        // No CR/LF here: launch.sh reads this with $(cat), which would leave a
+        // stray CR, and Jellyfin rejects that with 400. ffplay adds the CRLF.
+        fprintf(fp, "Authorization: %s", val);
         fclose(fp);
     }
     fp = fopen("/tmp/jellyfin_play", "w");
