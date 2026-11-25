@@ -1,0 +1,8 @@
+{
+    "name": "Hello Soup",
+    "description": "A tiny example app that shows how App Store apps are packaged.",
+    "version": "1.0.0",
+    "author": "OnionSoup",
+    "category": "Examples",
+    "devices": ["283", "354"]
+}

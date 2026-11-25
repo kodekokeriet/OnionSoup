@@ -1,0 +1,32 @@
+name: App Store catalog
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'appstore/**'
+      - '.github/workflows/appstore.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build and publish App Store catalog
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Build packages and catalog
+      run: |
+        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore"
+        cat out/catalog.json
+    - name: Publish to the "appstore" release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release view appstore --repo "${{ github.repository }}" > /dev/null 2>&1 || \
+          gh release create appstore --repo "${{ github.repository }}" --prerelease \
+            --title "App Store catalog" --notes "Built automatically from appstore/. Do not edit by hand."
+        gh release upload appstore out/* --repo "${{ github.repository }}" --clobber

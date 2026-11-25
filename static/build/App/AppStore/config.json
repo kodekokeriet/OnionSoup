@@ -1,0 +1,6 @@
+{
+"label":"App Store",
+"icon":"../../Icons/Default/app/pacman.png",
+"launch":"launch.sh",
+"description":"Download apps over WiFi (Mini+)"
+}

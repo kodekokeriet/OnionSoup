@@ -1,0 +1,6 @@
+{
+"label":"Hello Soup",
+"icon":"../../Icons/Default/app/pacman.png",
+"launch":"launch.sh",
+"description":"Example App Store app"
+}
