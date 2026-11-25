@@ -27,6 +27,10 @@ Katalogen bygges automatisk fra denne mappen.
 
 For å øke versjonen endrer du `version` i `app.json`. Da viser App Store `[update]` på enheter som har en eldre versjon.
 
+Apper fra App Store havner rett i Apps-fanen. Vil du heller at appen legger seg i en gruppe, legger du til
+`"group": "media"` (Medier) eller `"group": "settings"` (Innstillinger) i appens `config.json`.
+Brukeren kan alltid flytte appen selv med SELECT inne i en gruppe. Se `.tmp_update/script/app_groups.sh`.
+
 ## Porter fra Ports-Collection
 
 Alle portene i [OnionUI/Ports-Collection](https://github.com/OnionUI/Ports-Collection) havner automatisk i App Store.

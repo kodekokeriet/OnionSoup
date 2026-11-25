@@ -31,6 +31,12 @@ bool _getAppDirAndConfig(const char *app_dir_name, char *out_app_dir,
     strcpy(out_config_path, out_app_dir);
     strcat(out_config_path, "/config.json");
 
+    if (!is_file(out_config_path)) {
+        // apps placed in a group in the Apps tab (see script/app_groups.sh)
+        strcpy(out_config_path, out_app_dir);
+        strcat(out_config_path, "/config.grouped.json");
+    }
+
     if (!is_file(out_config_path))
         return false;
 
