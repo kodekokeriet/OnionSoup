@@ -14,7 +14,8 @@
 // Usage: jfplayer <play file>
 // The play file has key=value lines written by the Jellyfin app:
 //   url, auth, server, item, title, duration, start, audio (index|name),
-//   sub (index|name), audio_sel, sub_sel
+//   sub (index|name), audio_sel, sub_sel, local (1 = url is a downloaded
+//   file on the memory card; seeking is done in the file)
 //
 // Buttons: A pause, Left/Right -/+10 s, L1/R1 -/+1 min, X subtitles,
 // Y audio track, Up/Down or START show controls, B/MENU stop.
@@ -89,7 +90,9 @@ static volatile bool dec_failed = false;
 static volatile bool opened = false;
 static char dec_error[200] = "";
 
-static double open_start = 0; // position (s) the current stream was opened at
+static double open_start = 0;   // position (s) the current stream was opened at
+static bool local_mode = false; // playing a downloaded file
+static double local_origin = 0; // start_time of the local file, in seconds
 static volatile double first_pts = -1;
 static bool paused = false;
 static Uint32 wall_base = 0; // for streams without audio
@@ -161,6 +164,8 @@ static bool load_play_file(const char *path)
             copy_str(title, sizeof(title), v);
         else if (!strcmp(k, "duration"))
             duration = atof(v);
+        else if (!strcmp(k, "local"))
+            local_mode = atoi(v) != 0;
         else if (!strcmp(k, "start"))
             open_start = atof(v);
         else if (!strcmp(k, "audio_sel"))
@@ -190,8 +195,9 @@ static void report(const char *path, double pos, bool sync)
     snprintf(hdr, sizeof(hdr), "Authorization: %s", auth);
     snprintf(body, sizeof(body),
              "{\"ItemId\":\"%s\",\"PlaySessionId\":\"%s\",\"PositionTicks\":%lld,\"IsPaused\":%s,"
-             "\"PlayMethod\":\"Transcode\",\"CanSeek\":true}",
-             item_id, session_id, (long long)(pos * 10000000.0), paused ? "true" : "false");
+             "\"PlayMethod\":\"%s\",\"CanSeek\":true}",
+             item_id, session_id, (long long)(pos * 10000000.0), paused ? "true" : "false",
+             local_mode ? "DirectPlay" : "Transcode");
     pid_t pid = fork();
     if (pid == 0) {
         if (!sync && fork() != 0)
@@ -208,7 +214,7 @@ static void report(const char *path, double pos, bool sync)
 
 static void stop_encoding(void)
 {
-    if (!*server)
+    if (!*server || local_mode)
         return;
     char path[300], dev[80] = "";
     const char *d = strstr(base_url, "DeviceId=");
@@ -254,6 +260,10 @@ static double position(void)
 {
     if (first_pts < 0)
         return open_start;
+    if (local_mode) { // the file has real timestamps
+        double p = clock_pts() - local_origin;
+        return p < 0 ? 0 : p;
+    }
     double p = open_start + clock_pts() - first_pts;
     if (p < open_start)
         p = open_start;
@@ -308,6 +318,10 @@ static int interrupt_cb(void *ud)
 
 static void build_url(char *out, size_t n, double start)
 {
+    if (local_mode) {
+        copy_str(out, n, base_url);
+        return;
+    }
     char extra[200] = "";
     int l = 0;
     if (audio_sel >= 0)
@@ -359,6 +373,16 @@ static int decoder_main(void *ud)
         dec_failed = true;
         avformat_close_input(&fmt);
         return 0;
+    }
+    if (local_mode) {
+        local_origin = fmt->start_time != AV_NOPTS_VALUE ? fmt->start_time / (double)AV_TIME_BASE : 0;
+        if (duration <= 0 && fmt->duration != AV_NOPTS_VALUE)
+            duration = fmt->duration / (double)AV_TIME_BASE;
+        if (open_start > 0) {
+            int64_t ts = (int64_t)((open_start + local_origin) * AV_TIME_BASE);
+            if (av_seek_frame(fmt, -1, ts, AVSEEK_FLAG_BACKWARD) < 0)
+                DBG("seek failed\n");
+        }
     }
 
     AVCodec *vcodec = NULL, *acodec = NULL;
@@ -619,6 +643,8 @@ static void draw_osd(double pos, bool buffering)
     const char *labels[] = {paused ? "Spill" : "Pause", "10 s", "1 min", "Tekst", "Lyd", "Stopp"};
     int x = 16;
     for (int i = 0; i < 6; i++) {
+        if (local_mode && (i == 3 || i == 4))
+            continue; // downloaded files have one audio track and no subtitles
         int kw = text_w(f13, keys[i]);
         int kb = kw + 10 < 20 ? 20 : kw + 10;
         fill_round(x, y + 64, kb, 20, 10, C_ACCENT);
@@ -786,6 +812,8 @@ static void on_key(SDLKey k)
         seek_by(60);
         break;
     case SW_BTN_X:
+        if (local_mode)
+            break;
         menu = 1;
         menu_sel = 0;
         for (int i = 0; i < n_sub; i++)
