@@ -25,6 +25,8 @@ repo=kodekokeriet/OnionSoup
 work=$(mktemp -d)
 trap 'ssh -O exit -o ControlPath="$work/ssh" x 2> /dev/null; rm -rf "$work"' EXIT
 
+# MainUI is bind-mounted over miyoo/app/MainUI while the Miyoo runs, so that
+# file can only be replaced after an unmount (the Miyoo reboots right after).
 # One SSH connection for all steps (asks for the password only once)
 ssh_miyoo() { ssh -o ControlMaster=auto -o ControlPath="$work/ssh" -o ControlPersist=300 "$host" "$@"; }
 
@@ -56,7 +58,8 @@ fi
 
 if [ $full -eq 1 ]; then
 	echo "Copying $(du -sh "$sd" | cut -f1) to $host (full update)..."
-	tar -C "$sd" -cf - . | ssh_miyoo 'cd /mnt/SDCARD && rm -f .tmp_update/.os_manifest && tar -xf - && sync && reboot'
+	tar -C "$sd" -cf - . | ssh_miyoo 'cd /mnt/SDCARD && rm -f .tmp_update/.os_manifest &&
+		umount -l miyoo/app/MainUI 2> /dev/null; tar -xf - && sync && reboot'
 	echo "Done. The Miyoo is rebooting and installs the update."
 	exit 0
 fi
@@ -114,7 +117,7 @@ ssh_miyoo 'cd /mnt/SDCARD; b=Backup/os-update; rm -rf $b; mkdir -p $b
 	while IFS= read -r f; do
 		[ -f "$f" ] && mkdir -p "$b/$(dirname "$f")" && cp -p "$f" "$b/$f"
 	done; true' < "$work/changed"
-tar -C "$new" -cf - -T "$work/changed" | ssh_miyoo 'cd /mnt/SDCARD && tar -xf -'
+tar -C "$new" -cf - -T "$work/changed" | ssh_miyoo 'cd /mnt/SDCARD && { umount -l miyoo/app/MainUI 2> /dev/null; tar -xf -; }'
 ssh_miyoo 'cat > /mnt/SDCARD/.tmp_update/.os_manifest' < "$work/manifest"
 ssh_miyoo 'cd /mnt/SDCARD
 	export LD_LIBRARY_PATH=/lib:/config/lib:/customer/lib:/mnt/SDCARD/.tmp_update/lib
