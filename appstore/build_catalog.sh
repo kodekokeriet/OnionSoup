@@ -1,12 +1,13 @@
 #!/bin/sh
 # Build App Store packages and catalog.json from appstore/apps/<id>/.
 # Each app folder holds app.json (store metadata) plus the files that go in App/<id>/ on the SD card.
-# Usage: build_catalog.sh <out_dir> <download_base_url> [ports.json]
+# Usage: build_catalog.sh <out_dir> <download_base_url> [ports.json] [themes.json]
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 out=$1
 base=$2
 ports=${3:-}
+themes=${4:-}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 entries=""
@@ -30,9 +31,12 @@ for dir in "$here"/apps/*/; do
 "
 	echo "packaged $id ($size bytes)" >&2
 done
-if [ -n "$ports" ]; then
-	printf '%s' "$entries" | jq -s --slurpfile p "$ports" '{version: 1, apps: ((. | sort_by(.name)) + $p[0])}' > "$out/catalog.json"
-else
-	printf '%s' "$entries" | jq -s '{version: 1, apps: (. | sort_by(.name))}' > "$out/catalog.json"
-fi
+# Apps first, then ports and themes
+echo '[]' > "$out/.extra.json"
+for f in "$ports" "$themes"; do
+	[ -n "$f" ] || continue
+	jq -s '.[0] + .[1]' "$out/.extra.json" "$f" > "$out/.extra.tmp" && mv "$out/.extra.tmp" "$out/.extra.json"
+done
+printf '%s' "$entries" | jq -s --slurpfile x "$out/.extra.json" '{version: 1, apps: ((. | sort_by(.name)) + $x[0])}' > "$out/catalog.json"
+rm -f "$out/.extra.json"
 echo "wrote $out/catalog.json" >&2

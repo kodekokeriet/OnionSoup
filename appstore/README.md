@@ -40,6 +40,23 @@ Workflowen kjører hver mandag, så nye porter dukker opp av seg selv. App Store
 installerte, og når du fjerner en port, beholdes filer som andre installerte porter også bruker.
 På enheten må «Ports Collection» være slått på i Package Manager.
 
+## Temaer fra OnionUI/Themes
+
+Alle temaene i [OnionUI/Themes](https://github.com/OnionUI/Themes) havner automatisk i fanen **Temaer**.
+`build_themes.sh` leser `release/`-mappen der og lager én oppføring per tema eller temapakke, med en
+forhåndsvisning laget fra temaets `preview.png`. Zip-filen lastes ned direkte fra OnionUI/Themes og pakkes ut i
+`Themes/` på SD-kortet. Enheten sjekker nedlastingen mot git-blob-id-en (`git_sha1`), så CI trenger ikke laste ned
+alle temaene (ca. 1 GB) for å regne ut sjekksummer.
+
+I App Store kan man installere et tema, ta det i bruk (`themeSwitcher --apply "<mappe>"`), velge variant i en
+temapakke og fjerne det igjen. Temaet som er i bruk kan ikke fjernes. Featured-listen fra OnionUI/Themes blir
+hyllen «Populære temaer» på forsiden.
+
+## Navigering
+
+Lange lister blar opp og ned, ikke sidelengs. Forsiden viser noen få elementer per hylle og en «Se alle»-flis som
+åpner hele listen. I listene gir venstre/høyre en side om gangen, og L2/R2 hopper til forrige/neste forbokstav.
+
 ## Test lokalt
 
 ```sh
