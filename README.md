@@ -1,5 +1,11 @@
 <p>&nbsp;</p>
 
+# OnionSoup
+
+*OnionSoup is a fork of [Onion](https://github.com/OnionUI/Onion) for the Miyoo Mini and Mini+, with its own look, an app store and native Miyoo apps. Like Onion, it is licensed under GPL-3.0. Everything below is the original Onion README.*
+
+<p>&nbsp;</p>
+
 # <img alt="Onion" src="https://user-images.githubusercontent.com/44569252/179510333-40793fbc-f2a3-4269-8ab9-569b191d423f.png" width="196px">
 
 *An enhanced operating system for your Miyoo Mini and Mini+, featuring fine-tuned emulation with 100+ built-in emulators, auto-save and resume, a wealth of customization options, and much more. Performant, reliable, and straightforward retro gaming right in your pocket.*

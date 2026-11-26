@@ -1,0 +1,5 @@
+# Extra sources for App Store and Game Store.
+# One catalog.json URL per line (same format as the OnionSoup catalog, see appstore/README.md).
+# Apps go to App Store; entries with "type": "port" or "game" go to Game Store.
+# Example:
+# https://example.com/my-catalog.json

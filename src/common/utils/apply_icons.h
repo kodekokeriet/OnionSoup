@@ -173,7 +173,7 @@ bool _apply_singleIconFromPack(const char *config_path,
 
     json_forceSetString(config, "icon", icon_path);
 
-    char* config_str = cJSON_Print(config);
+    char *config_str = cJSON_Print(config);
     _saveConfigFile(config_path, config_str);
     cJSON_free(config_str);
     cJSON_Delete(config);
@@ -232,8 +232,14 @@ int _apply_iconPackOnConfigs(const char *path, const char *icon_pack_path,
             if (strcmp(GUEST_CONFIG, config_path) == 0)
                 continue;
 
-            if (!is_file(config_path))
-                continue;
+            if (!is_file(config_path)) {
+                // apps placed in a group in the Apps tab keep their config
+                // under another name (see script/app_groups.sh)
+                snprintf(config_path, STR_MAX * 2 - 1,
+                         "%s/%s/config.grouped.json", path, ep->d_name);
+                if (!is_file(config_path))
+                    continue;
+            }
 
             if (_apply_singleIconFromPack(config_path, icon_pack_path,
                                           reset_default))

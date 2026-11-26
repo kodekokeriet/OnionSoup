@@ -1,0 +1,6 @@
+{
+"label":"App Store",
+"icon":"../../Icons/Default/app/appstore.png",
+"launch":"launch.sh",
+"description":"Apps and themes over WiFi (Mini+)"
+}

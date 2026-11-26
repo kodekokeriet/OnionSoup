@@ -323,8 +323,13 @@ int _add_config_icons(const char *path, List *list, void (*action)(void *))
             if (strcmp(GUEST_CONFIG, config_path) == 0)
                 continue;
 
-            if (!is_file(config_path))
-                continue;
+            if (!is_file(config_path)) {
+                // apps placed in a group in the Apps tab
+                snprintf(config_path, STR_MAX * 2 - 1,
+                         "%s/%s/config.grouped.json", path, ep->d_name);
+                if (!is_file(config_path))
+                    continue;
+            }
 
             if (_add_config_icon(path, ep->d_name, config_path, list, action))
                 count++;

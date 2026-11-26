@@ -1,0 +1,4 @@
+OnionSoup theme
+
+A warm recolor of "Silky" by DiMo, the default Onion theme.
+Original credits are kept in Silky_Credits_-_DiMo.txt.

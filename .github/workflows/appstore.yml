@@ -1,0 +1,65 @@
+name: App Store catalog
+on:
+  workflow_dispatch:
+  schedule:
+    # Pick up new ports and themes every Monday
+    - cron: '17 4 * * 1'
+  push:
+    branches:
+      - main
+    paths:
+      - 'appstore/**'
+      - 'src/jellyfin/**'
+      - 'src/jfplayer/**'
+      - 'src/bookReader/**'
+      - 'src/common/soup/**'
+      - '.github/workflows/appstore.yml'
+  pull_request:
+    paths:
+      - 'appstore/**'
+      - 'src/jellyfin/**'
+      - 'src/jfplayer/**'
+      - 'src/bookReader/**'
+      - 'src/common/soup/**'
+      - '.github/workflows/appstore.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build and publish App Store catalog
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Install Pillow
+      run: pip install --quiet pillow
+    - name: Build ports list from OnionUI/Ports-Collection
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: appstore/build_ports.sh ports.json out "https://github.com/${{ github.repository }}/releases/download/appstore"
+    - name: Build themes list from OnionUI/Themes
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: appstore/build_themes.sh themes.json out "https://github.com/${{ github.repository }}/releases/download/appstore"
+    - name: Build homebrew games list from retrobrews
+      run: python3 appstore/build_homebrew.py homebrew.json out "https://github.com/${{ github.repository }}/releases/download/appstore"
+    - name: Build native apps (Miyoo toolchain)
+      run: |
+        docker run --rm -v "$PWD":/w -w /w aemiii91/miyoomini-toolchain:latest bash -c \
+          'source /root/.bashrc; set -e; for b in appstore/apps/*/build.sh; do echo "== $b"; sh "$b"; done'
+        sudo chown -R "$(id -u):$(id -g)" .
+    - name: Build packages and catalog
+      run: |
+        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json themes.json homebrew.json
+        cat out/catalog.json
+    - name: Publish to the "appstore" release
+      if: github.event_name != 'pull_request'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release view appstore --repo "${{ github.repository }}" > /dev/null 2>&1 || \
+          gh release create appstore --repo "${{ github.repository }}" --prerelease \
+            --title "App Store catalog" --notes "Built automatically from appstore/. Do not edit by hand."
+        gh release upload appstore out/* --repo "${{ github.repository }}" --clobber

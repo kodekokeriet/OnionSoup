@@ -1,5 +1,5 @@
 #!/bin/sh
-# OTA updates for Onion.
+# OTA updates for OnionSoup (fork of Onion).
 cmd=$1
 sysdir=/mnt/SDCARD/.tmp_update
 
@@ -11,7 +11,7 @@ BLUE='\033[1;34m'
 NC='\033[0m' # No Color
 
 # Repository name :
-GITHUB_REPOSITORY=OnionUI/Onion
+GITHUB_REPOSITORY=kodekokeriet/OnionSoup
 
 # channel : stable or beta
 channel=$(cat "$sysdir/config/ota_channel" 2> /dev/null)
@@ -99,7 +99,7 @@ check_connection() {
 }
 
 run_bootstrap() {
-	curl -k -s https://raw.githubusercontent.com/OnionUI/Onion/main/static/build/.tmp_update/script/ota_bootstrap.sh | sh
+	curl -k -s https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/static/build/.tmp_update/script/ota_bootstrap.sh | sh
 }
 
 channel_choice() {
@@ -124,10 +124,10 @@ get_release_info() {
 		return 1
 	fi
 
-	Release_asset=$(echo "$Release_assets_info" | jq '.assets[]? | select(.name | contains("Onion-v"))')
+	Release_asset=$(echo "$Release_assets_info" | jq '.assets[]? | select(.name | contains("OnionSoup-v"))')
 
 	Release_url=$(echo $Release_asset | jq '.browser_download_url' | tr -d '"')
-	Release_FullVersion=$(echo $Release_asset | jq '.name' | tr -d "\"" | sed 's/^Onion-v//g' | sed 's/\.zip$//g')
+	Release_FullVersion=$(echo $Release_asset | jq '.name' | tr -d "\"" | sed 's/^OnionSoup-v//g' | sed 's/\.zip$//g')
 	Release_Version=$(echo $Release_FullVersion | sed 's/-.*$//g')
 	Release_size=$(echo $Release_asset | jq -r '.size')
 	Release_size_MB=$(echo "$(($Release_size / 1024 / 1024))MB")
@@ -185,7 +185,7 @@ download_update() {
 
 		mkdir -p $sysdir/download/
 		echo -ne "\n\n" \
-			"${BLUE}== Downloading Onion $Release_Version ($channel channel) ==${NC}\n"
+			"${BLUE}== Downloading OnionSoup $Release_Version ($channel channel) ==${NC}\n"
 		/mnt/SDCARD/.tmp_update/bin/freemma > NUL
 		sync
 		wget --no-check-certificate $Release_url -O "$sysdir/download/$Release_Version.zip"

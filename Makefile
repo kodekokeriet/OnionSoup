@@ -1,7 +1,7 @@
 ###########################################################
 
-TARGET=Onion
-VERSION=4.4.0-beta-20260120
+TARGET=OnionSoup
+VERSION=0.1.0
 RA_SUBVERSION=1.22.2-1
 
 ###########################################################
@@ -124,11 +124,13 @@ core: $(CACHE)/.setup
 	@cd $(SRC_DIR)/themeSwitcher && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/tweaks && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/packageManager && BUILD_DIR=$(BIN_DIR) make
+	@cd $(SRC_DIR)/appStore && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/sendkeys && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/setState && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/renameRom && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/infoPanel && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/prompt && BUILD_DIR=$(BIN_DIR) make
+	@cd $(SRC_DIR)/appGroup && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/batmon && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/easter && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/read_uuid && BUILD_DIR=$(BIN_DIR) make
@@ -161,6 +163,9 @@ apps: $(CACHE)/.setup
 	@cd $(SRC_DIR)/batteryMonitorUI && BUILD_DIR="$(PACKAGES_APP_DEST)/Battery Monitor/App/BatteryMonitorUI" make
 	@find $(SRC_DIR)/batteryMonitorUI -depth -type d -name res -exec cp -r {}/. "$(PACKAGES_APP_DEST)/Battery Monitor/App/BatteryMonitorUI/res/" \;
 	@cd $(SRC_DIR)/playActivityUI && BUILD_DIR="$(PACKAGES_APP_DEST)/Activity Tracker/App/PlayActivity" make
+	@mkdir -p "$(PACKAGES_APP_DEST)/Bokhylle (Ebook Reader)/App/Bokhylle"
+	@rsync -a --exclude=app.json --exclude=cover.png --exclude=build.sh --exclude=bokhylle $(ROOT_DIR)/appstore/apps/Bokhylle/ "$(PACKAGES_APP_DEST)/Bokhylle (Ebook Reader)/App/Bokhylle/"
+	@cd $(SRC_DIR)/bookReader && BUILD_DIR="$(PACKAGES_APP_DEST)/Bokhylle (Ebook Reader)/App/Bokhylle" make
 	@find $(SRC_DIR)/playActivityUI -depth -type d -name res -exec cp -r {}/. "$(PACKAGES_APP_DEST)/Activity Tracker/App/PlayActivity/res/" \;
 	@find $(SRC_DIR)/packageManager -depth -type d -name res -exec cp -r {}/. $(BUILD_DIR)/App/PackageManager/res/ \;
 	@cd $(SRC_DIR)/clock && BUILD_DIR="$(BIN_DIR)" make
