@@ -35,7 +35,7 @@
 #include "soup/soup_ui.h"
 #include "system/keymap_sw.h"
 
-#define MAX_ITEMS 512
+#define MAX_ITEMS 1024
 #define MAX_VARIANTS 12
 #define MAX_LOADED 40 // items with scaled pictures kept in memory
 

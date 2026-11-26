@@ -69,9 +69,11 @@ appstore/build_catalog.sh /tmp/out "file:///tmp/out"
 
 ## Game Store: homebrew games
 
-`homebrew.json` lists homebrew games for the Game Store (`App/GameStore`, which runs `appStore --games`).
-Files are downloaded straight from the author's or archive's own link on the device, never re-hosted by us,
-because every game has its own licence. One entry:
+`build_homebrew.py` builds the homebrew games list for the Game Store (`App/GameStore`, which runs
+`appStore --games`) from the [retrobrews](https://github.com/retrobrews) collections: homebrew whose authors
+allow free distribution, one repo per system. The device downloads each ROM straight from that repo, pinned
+to a commit, so we never re-host the games. (romhacking.net is not used: its robots.txt disallows
+automated downloads.) One entry:
 
 ```json
 {"id": "game-<slug>", "type": "game", "name": "...", "author": "...", "description": "...",

@@ -43,6 +43,8 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: appstore/build_themes.sh themes.json out "https://github.com/${{ github.repository }}/releases/download/appstore"
+    - name: Build homebrew games list from retrobrews
+      run: python3 appstore/build_homebrew.py homebrew.json out "https://github.com/${{ github.repository }}/releases/download/appstore"
     - name: Build native apps (Miyoo toolchain)
       run: |
         docker run --rm -v "$PWD":/w -w /w aemiii91/miyoomini-toolchain:latest bash -c \
@@ -50,7 +52,7 @@ jobs:
         sudo chown -R "$(id -u):$(id -g)" .
     - name: Build packages and catalog
       run: |
-        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json themes.json appstore/homebrew.json
+        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json themes.json homebrew.json
         cat out/catalog.json
     - name: Publish to the "appstore" release
       if: github.event_name != 'pull_request'
