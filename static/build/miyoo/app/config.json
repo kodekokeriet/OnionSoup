@@ -1,7 +1,7 @@
 {
-    "name": "Silky",
-    "author": "DiMo",
-    "description": "[Onion default theme]",
+    "name": "OnionSoup",
+    "author": "OnionSoup (based on Silky by DiMo)",
+    "description": "[OnionSoup default theme]",
     "hideIconTitle": false,
     "batteryPercentage": {
         "visible": true,
