@@ -155,8 +155,9 @@ sort_apps_tab() {
     wanted=/tmp/app_groups_wanted.$$
     {
         [ -f "$appdir/AppStore/config.json" ] && echo AppStore
+        [ -f "$appdir/GameStore/config.json" ] && echo GameStore
         for name in $(list_apps); do
-            [ "$name" = AppStore ] && continue
+            case "$name" in AppStore | GameStore) continue ;; esac
             [ -f "$appdir/$name/config.json" ] && printf '%s\t%s\n' "$(json_value "$appdir/$name/config.json" label)" "$name"
         done | sort -f | cut -f2
         for id in $(group_ids); do
@@ -222,7 +223,7 @@ add_menu() { # group
     set --
     apps=""
     for name in $(list_apps); do
-        [ "$name" = AppStore ] && continue
+        case "$name" in AppStore | GameStore) continue ;; esac
         [ "$(group_of "$name")" = top ] || continue
         set -- "$@" "$(json_value "$(config_of "$name")" label)"
         apps="$apps $name"

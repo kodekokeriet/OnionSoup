@@ -66,3 +66,21 @@ Lange lister blar opp og ned, ikke sidelengs. Forsiden viser noen få elementer 
 ```sh
 appstore/build_catalog.sh /tmp/out "file:///tmp/out"
 ```
+
+## Game Store: homebrew games
+
+`build_homebrew.py` builds the homebrew games list for the Game Store (`App/GameStore`, which runs
+`appStore --games`) from the [retrobrews](https://github.com/retrobrews) collections: homebrew whose authors
+allow free distribution, one repo per system. The device downloads each ROM straight from that repo, pinned
+to a commit, so we never re-host the games. (romhacking.net is not used: its robots.txt disallows
+automated downloads.) One entry:
+
+```json
+{"id": "game-<slug>", "type": "game", "name": "...", "author": "...", "description": "...",
+ "version": "1.0", "system": "NES", "url": "https://...", "sha256": "...", "size": 40976,
+ "file": "<name>.nes", "extract": false, "image": "https://...", "genre": "Plattform"}
+```
+
+`system` is the `Emu/<system>` folder the game needs: the Game Store hides games for systems
+the device has no emulator for, and Select filters by system. `file` is the name saved in
+`Roms/<system>/`; with `"extract": true` the download is a zip unpacked into `Roms/<system>/<file without extension>/`.

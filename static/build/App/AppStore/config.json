@@ -2,5 +2,5 @@
 "label":"App Store",
 "icon":"../../Icons/Default/app/appstore.png",
 "launch":"launch.sh",
-"description":"Apps and ports over WiFi (Mini+)"
+"description":"Apps and themes over WiFi (Mini+)"
 }

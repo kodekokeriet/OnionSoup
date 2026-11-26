@@ -1,0 +1,6 @@
+{
+"label":"Game Store",
+"icon":"../../Icons/Default/app/gamestore.png",
+"launch":"launch.sh",
+"description":"Ports and homebrew games over WiFi (Mini+)"
+}
