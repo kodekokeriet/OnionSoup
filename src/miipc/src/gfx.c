@@ -72,17 +72,28 @@ void gfx_present(void)
     SDL_RenderPresent(ren);
 }
 #else
+/* Miyoo: the panel is mounted upside down. Like the other OnionSoup apps we draw
+ * into our own surface and blit it to a hardware video surface; the Miyoo SDL
+ * turns that the right way when it flips. MIIPC_FLIP=1 turns it in software
+ * instead, for an SDL that does not. */
+static SDL_Surface *video;
+static int soft_flip;
+
 int gfx_init(void)
 {
     detect_resolution();
-    screen = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 32, SDL_SWSURFACE);
-    if (!screen)
-        screen = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 16, SDL_SWSURFACE);
-    if (!screen && (SCREEN_W != 640 || SCREEN_H != 480)) {
+    soft_flip = getenv("MIIPC_FLIP") != NULL;
+    video = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 32, SDL_HWSURFACE);
+    if (!video && (SCREEN_W != 640 || SCREEN_H != 480)) {
         SCREEN_W = 640;
         SCREEN_H = 480;
-        screen = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 32, SDL_SWSURFACE);
+        video = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 32, SDL_HWSURFACE);
     }
+    if (!video)
+        video = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 16, SDL_HWSURFACE);
+    if (!video)
+        return -1;
+    screen = SDL_CreateRGBSurface(SDL_SWSURFACE, SCREEN_W, SCREEN_H, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0);
     if (!screen)
         return -1;
     SDL_ShowCursor(SDL_DISABLE);
@@ -90,7 +101,29 @@ int gfx_init(void)
     return 0;
 }
 
-void gfx_present(void) { SDL_Flip(screen); }
+/* turn 180 degrees in place: swap pixel i with pixel n-1-i */
+static void turn_180(void)
+{
+    SDL_LockSurface(screen);
+    Uint32 *a = (Uint32 *)screen->pixels;
+    int n = screen->pitch / 4 * SCREEN_H;
+    for (int i = 0, j = n - 1; i < j; i++, j--) {
+        Uint32 t = a[i];
+        a[i] = a[j];
+        a[j] = t;
+    }
+    SDL_UnlockSurface(screen);
+}
+
+void gfx_present(void)
+{
+    if (soft_flip)
+        turn_180();
+    SDL_BlitSurface(screen, NULL, video, NULL);
+    SDL_Flip(video);
+    if (soft_flip)
+        turn_180(); /* back again: the app may draw on top of the last frame */
+}
 #endif
 
 void gfx_quit(void) {}
