@@ -84,3 +84,9 @@ automated downloads.) One entry:
 `system` is the `Emu/<system>` folder the game needs: the Game Store hides games for systems
 the device has no emulator for, and Select filters by system. `file` is the name saved in
 `Roms/<system>/`; with `"extract": true` the download is a zip unpacked into `Roms/<system>/<file without extension>/`.
+
+## Extra sources
+
+Add catalog URLs, one per line, to `.tmp_update/config/appstore_sources.txt` on the SD card. App Store and
+Game Store merge them into the OnionSoup catalog on every fetch (an id already in the catalog is not replaced,
+and a source that fails to load is skipped).

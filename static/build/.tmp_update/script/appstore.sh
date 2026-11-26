@@ -28,6 +28,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 NC='\033[0m'
 
+# Extra catalogs: one catalog.json URL per line, "#" starts a comment.
+# Entries keep the first id seen, so the OnionSoup catalog wins over extra sources.
+SOURCES_FILE=${APPSTORE_SOURCES:-$sysdir/config/appstore_sources.txt}
 status_file=$workdir/status
 batch=0
 
@@ -96,12 +99,35 @@ sha256_of() {
 	fi
 }
 
+# Add the apps of every extra source to $catalog; a source that fails is skipped
+merge_sources() {
+	[ -f "$SOURCES_FILE" ] || return 0
+	sed 's/#.*//' "$SOURCES_FILE" | while read -r url; do
+		case "$url" in
+			http://* | https://*) ;;
+			*) continue ;;
+		esac
+		echo -n "Source $url... "
+		if curl -k -s -L -f -o "$catalog.src" "$url" && jq -e '.apps | arrays' "$catalog.src" > /dev/null 2>&1 &&
+			jq -s --arg src "$url" '.[0].apps += [.[1].apps[] | select(type == "object" and (.id | type) == "string") | . + {source_catalog: $src}]
+				| .[0].apps |= (reduce .[] as $a ([]; if any(.[]; .id == $a.id) then . else . + [$a] end)) | .[0]' \
+				"$catalog" "$catalog.src" > "$catalog.tmp"; then
+			mv "$catalog.tmp" "$catalog"
+			echo -e "${GREEN}OK${NC}"
+		else
+			echo -e "${YELLOW}skipped${NC}"
+		fi
+		rm -f "$catalog.src" "$catalog.tmp"
+	done
+}
+
 fetch_catalog() {
 	mkdir -p "$workdir"
 	echo -n "Fetching app catalog... "
 	if curl -k -s -L -f -o "$catalog.tmp" "$CATALOG_URL" && jq -e '.apps' "$catalog.tmp" > /dev/null 2>&1; then
 		mv "$catalog.tmp" "$catalog"
 		echo -e "${GREEN}OK${NC}"
+		merge_sources
 	elif [ -f "$catalog" ]; then
 		rm -f "$catalog.tmp"
 		echo -e "${YELLOW}offline, using saved catalog${NC}"
