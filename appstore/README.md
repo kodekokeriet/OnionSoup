@@ -103,3 +103,8 @@ An entry with `"type": "romhack"` (via an extra source) is a patch for a ROM the
 
 The Game Store finds the original by sha1 in `Roms/<system>/`, copies it to `file` and saves the patch next to it
 with the same name, so RetroArch applies it when the game starts. We never ship ROMs.
+
+## Teste en app fra en PR
+
+App Store-workflowen lagrer app-pakkene som artefakt også på PR-er. `tools/miyoo_app.sh <miyoo-adresse> <AppId> [branch]`
+henter `<AppId>.zip` fra siste vellykkede kjøring på branchen og pakker den ut i `App/<AppId>` over SSH.

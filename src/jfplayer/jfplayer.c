@@ -33,6 +33,8 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <libavcodec/avcodec.h>
@@ -92,6 +94,9 @@ static char dec_error[200] = "";
 
 static double open_start = 0;   // position (s) the current stream was opened at
 static bool local_mode = false; // playing a downloaded file
+static char grow_marker[400] = ""; // the file is still downloading while this exists
+static AVIOContext *grow_io = NULL;
+static int grow_fd = -1;
 static double local_origin = 0; // start_time of the local file, in seconds
 static volatile double first_pts = -1;
 static bool paused = false;
@@ -164,6 +169,8 @@ static bool load_play_file(const char *path)
             copy_str(title, sizeof(title), v);
         else if (!strcmp(k, "duration"))
             duration = atof(v);
+        else if (!strcmp(k, "grow"))
+            copy_str(grow_marker, sizeof(grow_marker), v);
         else if (!strcmp(k, "local"))
             local_mode = atoi(v) != 0;
         else if (!strcmp(k, "start"))
@@ -310,6 +317,48 @@ static bool ring_push(const Uint8 *data, int len, double end_pts)
 
 /* ---------- decoder thread ---------- */
 
+// Reading a file that is still being downloaded: at the end, wait for more
+static int grow_read(void *ud, uint8_t *buf, int size)
+{
+    (void)ud;
+    for (;;) {
+        ssize_t n = read(grow_fd, buf, size);
+        if (n > 0)
+            return (int)n;
+        if (abort_dec)
+            return AVERROR_EXIT;
+        if (access(grow_marker, F_OK) != 0) { // download finished (or failed)
+            n = read(grow_fd, buf, size);
+            return n > 0 ? (int)n : AVERROR_EOF;
+        }
+        SDL_Delay(100);
+    }
+}
+
+static int64_t grow_seek(void *ud, int64_t off, int whence)
+{
+    (void)ud;
+    if (whence == AVSEEK_SIZE) {
+        struct stat st;
+        if (access(grow_marker, F_OK) == 0 || fstat(grow_fd, &st) != 0)
+            return -1;
+        return st.st_size;
+    }
+    return lseek(grow_fd, off, whence & ~AVSEEK_FORCE);
+}
+
+static void grow_close(void)
+{
+    if (grow_io) {
+        av_free(grow_io->buffer);
+        av_free(grow_io);
+        grow_io = NULL;
+    }
+    if (grow_fd >= 0)
+        close(grow_fd);
+    grow_fd = -1;
+}
+
 static int interrupt_cb(void *ud)
 {
     (void)ud;
@@ -360,6 +409,18 @@ static int decoder_main(void *ud)
     av_dict_set(&opts, "analyzeduration", "2000000", 0);
     av_dict_set(&opts, "probesize", "1000000", 0);
     DBG("open at %.1f\n", open_start);
+    if (local_mode && *grow_marker) {
+        grow_fd = open(url, O_RDONLY);
+        unsigned char *iobuf = av_malloc(32768);
+        if (grow_fd >= 0 && iobuf)
+            grow_io = avio_alloc_context(iobuf, 32768, 0, NULL, grow_read, NULL, grow_seek);
+        if (grow_io) {
+            fmt->pb = grow_io;
+            fmt->flags |= AVFMT_FLAG_CUSTOM_IO;
+        }
+        else
+            av_free(iobuf);
+    }
     if (avformat_open_input(&fmt, url, NULL, &opts) < 0) {
         DBG("open failed\n");
         av_dict_free(&opts);
@@ -544,6 +605,7 @@ static void stop_decoder(void)
     SDL_UnlockMutex(mtx);
     SDL_WaitThread(dec_thread, NULL);
     dec_thread = NULL;
+    grow_close();
 }
 
 // (Re)open the stream at the given position
