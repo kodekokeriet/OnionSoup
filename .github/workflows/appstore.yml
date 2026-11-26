@@ -2,7 +2,7 @@ name: App Store catalog
 on:
   workflow_dispatch:
   schedule:
-    # Pick up new Ports-Collection releases every Monday
+    # Pick up new ports and themes every Monday
     - cron: '17 4 * * 1'
   push:
     branches:
@@ -37,6 +37,10 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: appstore/build_ports.sh ports.json out "https://github.com/${{ github.repository }}/releases/download/appstore"
+    - name: Build themes list from OnionUI/Themes
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: appstore/build_themes.sh themes.json out "https://github.com/${{ github.repository }}/releases/download/appstore"
     - name: Build native apps (Miyoo toolchain)
       run: |
         docker run --rm -v "$PWD":/w -w /w aemiii91/miyoomini-toolchain:latest bash -c \
@@ -44,7 +48,7 @@ jobs:
         sudo chown -R "$(id -u):$(id -g)" .
     - name: Build packages and catalog
       run: |
-        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json
+        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json themes.json
         cat out/catalog.json
     - name: Publish to the "appstore" release
       if: github.event_name != 'pull_request'

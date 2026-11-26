@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Make a 160x225 cover thumbnail (centre-cropped) for the App Store. Usage: thumb.py <in> <out.png>"""
+"""Make a centre-cropped thumbnail for the App Store. Usage: thumb.py <in> <out.png> [width height]
+The default 160x225 is a portrait cover; themes use 256x192 (4:3, like the screen)."""
 import sys
 from PIL import Image
 
-W, H = 160, 225
+W, H = (int(sys.argv[3]), int(sys.argv[4])) if len(sys.argv) > 4 else (160, 225)
 im = Image.open(sys.argv[1]).convert("RGBA")
 scale = max(W / im.width, H / im.height)
 im = im.resize((max(W, round(im.width * scale)), max(H, round(im.height * scale))), Image.LANCZOS)

@@ -126,6 +126,14 @@ int main(int argc, char *argv[])
             reapply = true;
             update_previews = true;
         }
+        else if (strcmp(argv[i], "--apply") == 0 && i + 1 < argc) {
+            // Switch to the theme folder Themes/<name> (used by the App Store)
+            char theme_path[STR_MAX * 2];
+            if (!getThemePath(argv[i + 1], theme_path))
+                return 1;
+            reinstallTheme(argv[i + 1], true, false);
+            return 0;
+        }
     }
 
     if (reapply) {
