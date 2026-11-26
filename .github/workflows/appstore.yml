@@ -11,6 +11,7 @@ on:
       - 'appstore/**'
       - 'src/jellyfin/**'
       - 'src/jfplayer/**'
+      - 'src/youtube/**'
       - 'src/bookReader/**'
       - 'src/miipc/**'
       - 'src/common/soup/**'
@@ -20,6 +21,7 @@ on:
       - 'appstore/**'
       - 'src/jellyfin/**'
       - 'src/jfplayer/**'
+      - 'src/youtube/**'
       - 'src/bookReader/**'
       - 'src/miipc/**'
       - 'src/common/soup/**'
@@ -56,6 +58,12 @@ jobs:
       run: |
         appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json themes.json homebrew.json
         cat out/catalog.json
+    - name: Keep the app packages (for testing a PR with tools/miyoo_app.sh)
+      uses: actions/upload-artifact@v4
+      with:
+        name: apps
+        path: out/*.zip
+        retention-days: 14
     - name: Publish to the "appstore" release
       if: github.event_name != 'pull_request'
       env:

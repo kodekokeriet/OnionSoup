@@ -1,0 +1,8 @@
+# Invidious servers the YouTube app tries, in order (one per line).
+# Add your own at the top. If none answer, the app asks api.invidious.io
+# for public servers with the API turned on.
+https://inv.nadeko.net
+https://yewtu.be
+https://invidious.nerdvpn.de
+https://invidious.f5.si
+https://iv.melmac.space
