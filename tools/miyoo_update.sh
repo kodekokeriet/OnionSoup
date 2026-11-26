@@ -20,6 +20,17 @@ zip=$(find "$work/dl" -name '*.zip' | head -n 1)
 mkdir "$work/sd"
 unzip -q "$zip" -d "$work/sd"
 
-echo "Copying to $host..."
-tar -C "$work/sd" -cf - . | ssh "root@$host" 'cd /mnt/SDCARD && tar -xf - && sync && reboot'
+# One SSH connection for all steps (asks for the password only once)
+ssh_miyoo() { ssh -o ControlMaster=auto -o ControlPath="$work/ssh" -o ControlPersist=120 "root@$host" "$@"; }
+
+# RetroArch is the biggest part of the build and rarely changes: leave it out
+# when the Miyoo already has the same version (the installer skips it anyway)
+pkg=$work/sd/RetroArch/ra_package_version.txt
+if [ -f "$pkg" ] && [ "$(ssh_miyoo cat /mnt/SDCARD/RetroArch/onion_ra_version.txt 2> /dev/null)" = "$(cat "$pkg")" ]; then
+	echo "RetroArch $(cat "$pkg") is already on the Miyoo, skipping it."
+	rm -f "$work/sd/RetroArch/retroarch.pak" "$pkg"
+fi
+
+echo "Copying $(du -sh "$work/sd" | cut -f1) to $host..."
+tar -C "$work/sd" -cf - . | ssh_miyoo 'cd /mnt/SDCARD && tar -xf - && sync && reboot'
 echo "Done. The Miyoo is rebooting."
