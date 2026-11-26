@@ -10,12 +10,14 @@ on:
     paths:
       - 'appstore/**'
       - 'src/jellyfin/**'
+      - 'src/jfplayer/**'
       - 'src/common/soup/**'
       - '.github/workflows/appstore.yml'
   pull_request:
     paths:
       - 'appstore/**'
       - 'src/jellyfin/**'
+      - 'src/jfplayer/**'
       - 'src/common/soup/**'
       - '.github/workflows/appstore.yml'
 

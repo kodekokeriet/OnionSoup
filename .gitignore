@@ -41,3 +41,4 @@ src/tree/tree
 src/pippi/pippi
 src/cpuclock/cpuclock
 appstore/apps/*/jellyfin
+appstore/apps/*/jfplayer

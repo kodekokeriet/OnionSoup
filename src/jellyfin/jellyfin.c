@@ -60,7 +60,7 @@ static const char *launch_keyboard(const char *initial, const char *title)
 }
 #endif
 
-#define APP_VERSION "0.1.0"
+#define APP_VERSION "0.2.0"
 #define MAX_ITEMS 400
 #define MAX_SERVERS 8
 #define MAX_DEPTH 6
@@ -78,6 +78,7 @@ typedef struct {
     char overview[600];
     char sub[96]; // year, artist or episode number
     long runtime_ticks;
+    long resume_s; // where playback stopped last time, in seconds
     bool is_folder;
     bool played;
     int img_state; // 0 none, 1 loading, 2 loaded, 3 failed
@@ -555,6 +556,8 @@ static void fill_item(Item *it, cJSON *o)
     it->runtime_ticks = cJSON_IsNumber(ticks) ? (long)(ticks->valuedouble / 10000000.0) : 0; // seconds
     cJSON *ud = cJSON_GetObjectItem(o, "UserData");
     it->played = ud && cJSON_IsTrue(cJSON_GetObjectItem(ud, "Played"));
+    cJSON *pos = ud ? cJSON_GetObjectItem(ud, "PlaybackPositionTicks") : NULL;
+    it->resume_s = cJSON_IsNumber(pos) ? (long)(pos->valuedouble / 10000000.0) : 0;
     cJSON *year = cJSON_GetObjectItem(o, "ProductionYear");
     cJSON *idx = cJSON_GetObjectItem(o, "IndexNumber");
     if (!strcmp(it->type, "Audio")) {
@@ -836,30 +839,54 @@ static void poll_music(void)
     }
 }
 
-static void play_video(Item *it)
+// Write the play file for jfplayer (see src/jfplayer) and leave the app;
+// launch.sh starts the player and then this app again.
+static void play_video(Item *it, long start_s)
 {
     music_stop();
-    char url[800];
-    snprintf(url, sizeof(url),
-             "%s/Videos/%s/stream.ts?api_key=%s&ApiKey=%s&VideoCodec=h264&AudioCodec=mp3&MaxWidth=640&MaxHeight=480"
-             "&VideoBitrate=1000000&AudioBitrate=128000&AudioChannels=2&TranscodingMaxAudioChannels=2"
-             "&h264-profile=baseline&h264-level=30&Static=false&MediaSourceId=%s&DeviceId=%s",
-             server_url, it->id, token, token, it->id, device_id);
-    FILE *fp = fopen("/tmp/jellyfin_headers", "w");
-    if (fp) {
-        char val[360];
-        auth_value(val, sizeof(val));
-        // No CR/LF here: launch.sh reads this with $(cat), which would leave a
-        // stray CR, and Jellyfin rejects that with 400. ffplay adds the CRLF.
-        fprintf(fp, "Authorization: %s", val);
-        fclose(fp);
-    }
-    fp = fopen("/tmp/jellyfin_play", "w");
+    FILE *fp = fopen("/tmp/jellyfin_play", "w");
     if (!fp) {
         show_message("Kunne ikke starte avspilling", 3000);
         return;
     }
-    fprintf(fp, "%s\n", url);
+    char val[360];
+    auth_value(val, sizeof(val));
+    fprintf(fp,
+            "url=%s/Videos/%s/stream.ts?api_key=%s&ApiKey=%s&VideoCodec=h264&AudioCodec=mp3&MaxWidth=640"
+            "&MaxHeight=480&VideoBitrate=1000000&AudioBitrate=128000&AudioChannels=2&TranscodingMaxAudioChannels=2"
+            "&h264-profile=baseline&h264-level=30&Static=false&MediaSourceId=%s&DeviceId=%s\n",
+            server_url, it->id, token, token, it->id, device_id);
+    fprintf(fp, "auth=%s\nserver=%s\nitem=%s\ntitle=%s\nduration=%ld\nstart=%ld\n", val, server_url, it->id,
+            it->name, it->runtime_ticks, start_s);
+    // audio and subtitle tracks, for the menus in the player
+    char path[200];
+    snprintf(path, sizeof(path), "/Users/%s/Items/%s", user_id, it->id);
+    cJSON *d = api_json("GET", path, NULL);
+    cJSON *srcs = d ? cJSON_GetObjectItem(d, "MediaSources") : NULL;
+    cJSON *streams = cJSON_GetArraySize(srcs) ? cJSON_GetObjectItem(cJSON_GetArrayItem(srcs, 0), "MediaStreams") : NULL;
+    int audio_sel = -1;
+    cJSON *st;
+    cJSON_ArrayForEach(st, streams)
+    {
+        const char *type = jstr(st, "Type");
+        cJSON *idx = cJSON_GetObjectItem(st, "Index");
+        if (!cJSON_IsNumber(idx))
+            continue;
+        char name[120];
+        copy_str(name, sizeof(name), jstr(st, "DisplayTitle"));
+        for (char *c = name; *c; c++)
+            if (*c == '\n' || *c == '\r')
+                *c = ' ';
+        if (!strcmp(type, "Audio")) {
+            fprintf(fp, "audio=%d|%s\n", idx->valueint, name);
+            if (audio_sel < 0 || cJSON_IsTrue(cJSON_GetObjectItem(st, "IsDefault")))
+                audio_sel = idx->valueint;
+        }
+        else if (!strcmp(type, "Subtitle"))
+            fprintf(fp, "sub=%d|%s\n", idx->valueint, name);
+    }
+    cJSON_Delete(d);
+    fprintf(fp, "audio_sel=%d\nsub_sel=-1\n", audio_sel);
     fclose(fp);
     // remember where we were, so the app can come back to the same place
     fp = fopen("/tmp/jellyfin_state", "w");
@@ -929,7 +956,10 @@ static void draw_hint_bar(void)
         HINT("B", "Tilbake");
     }
     else if (scr == S_DETAIL) {
-        HINT("A", "Spill av");
+        bool resume = detail_item && detail_item->resume_s > 30;
+        HINT("A", resume ? "Fortsett" : "Spill av");
+        if (resume)
+            HINT("X", "Fra start");
         HINT("B", "Tilbake");
     }
     else {
@@ -1169,10 +1199,26 @@ static void draw_detail(void)
     y += 34;
     y = text_wrap(f15, *it->overview ? it->overview : "Ingen beskrivelse.", x, y, w, 21, 6, C_SOFT);
     int by = TOP_H + 222;
-    fill_round(x, by, text_w(f19, "Spill av") + 40, 36, 18, C_ACCENT);
-    text(f19, "Spill av", x + 20, by + 6, C_DARK);
-    if (it->played)
-        text(f15, "Sett", x + text_w(f19, "Spill av") + 56, by + 9, C_GREEN);
+    char label[48] = "Spill av";
+    if (it->resume_s > 30) {
+        long r = it->resume_s;
+        if (r >= 3600)
+            snprintf(label, sizeof(label), "Fortsett fra %ld:%02ld:%02ld", r / 3600, r / 60 % 60, r % 60);
+        else
+            snprintf(label, sizeof(label), "Fortsett fra %ld:%02ld", r / 60, r % 60);
+    }
+    int lw = text_w(f19, label) + 40;
+    fill_round(x, by, lw, 36, 18, C_ACCENT);
+    text(f19, label, x + 20, by + 6, C_DARK);
+    if (it->resume_s > 30 && it->runtime_ticks > 0) {
+        int pw = lw - 36;
+        fill_round(x + 18, by + 42, pw, 4, 2, C_CARD);
+        int fw = (int)(pw * (double)it->resume_s / it->runtime_ticks);
+        if (fw > 0)
+            fill_round(x + 18, by + 42, fw > pw ? pw : fw, 4, 2, C_ACCENT);
+    }
+    else if (it->played)
+        text(f15, "Sett", x + lw + 16, by + 9, C_GREEN);
     text_fit(f13, "Video omkodes av serveren til 640x480 for Miyoo.", 24, TOP_H + 300, SCREEN_W - 48, C_GREY);
 }
 
@@ -1266,7 +1312,9 @@ static void on_key(SDLKey key)
         if (key == SW_BTN_B)
             scr = S_HOME;
         else if (key == SW_BTN_A)
-            play_video(detail_item);
+            play_video(detail_item, detail_item->resume_s > 30 ? detail_item->resume_s : 0);
+        else if (key == SW_BTN_X && detail_item->resume_s > 30)
+            play_video(detail_item, 0);
         break;
     case S_HOME: {
         if (key == SW_BTN_Y && music_pid > 0) {
