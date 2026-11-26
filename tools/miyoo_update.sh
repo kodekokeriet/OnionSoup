@@ -1,6 +1,7 @@
 #!/bin/sh
 # Put the newest OnionSoup build on a Miyoo over SSH, in one go.
 # Usage: tools/miyoo_update.sh [--full] <miyoo-address> [branch]   (default: main; a PR branch works too)
+# The SSH user is "onion" (Onion's default); use user@address or MIYOO_USER for another.
 # Needs: gh (logged in), unzip, ssh, and 7z (p7zip) for quick updates.
 #
 # Quick update (default): unpacks the system package (onion.pak) here and sends
@@ -19,12 +20,13 @@ if [ "${1:-}" = "--full" ]; then
 fi
 host=${1:?usage: $0 [--full] <miyoo-address> [branch]}
 branch=${2:-main}
+case "$host" in *@*) ;; *) host=${MIYOO_USER:-onion}@$host ;; esac
 repo=kodekokeriet/OnionSoup
 work=$(mktemp -d)
 trap 'ssh -O exit -o ControlPath="$work/ssh" x 2> /dev/null; rm -rf "$work"' EXIT
 
 # One SSH connection for all steps (asks for the password only once)
-ssh_miyoo() { ssh -o ControlMaster=auto -o ControlPath="$work/ssh" -o ControlPersist=300 "root@$host" "$@"; }
+ssh_miyoo() { ssh -o ControlMaster=auto -o ControlPath="$work/ssh" -o ControlPersist=300 "$host" "$@"; }
 
 run=$(gh run list -R "$repo" -b "$branch" -w build.yml -s success -L 1 --json databaseId -q '.[0].databaseId')
 [ -n "$run" ] || { echo "No successful build on $branch"; exit 1; }
