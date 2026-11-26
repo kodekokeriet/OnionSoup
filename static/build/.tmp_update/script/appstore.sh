@@ -116,7 +116,7 @@ installed_dir=$workdir/installed
 # Version of an installed app or port, empty if not installed by the App Store
 installed_version() {
 	case "$1" in
-		port-* | theme-*) cat "$installed_dir/$1.version" 2> /dev/null ;;
+		port-* | theme-* | game-*) cat "$installed_dir/$1.version" 2> /dev/null ;;
 		*) cat "$appdir/$1/.appstore_version" 2> /dev/null ;;
 	esac
 }
@@ -260,6 +260,64 @@ remove_port() {
 			d=$(dirname "$d")
 		done
 	done < "$list"
+	rm -f "$list" "$installed_dir/$id.version"
+	echo -e "${GREEN}Removed.${NC}"
+	status "done 100 Removed"
+	pause
+}
+
+# Homebrew game: a ROM file (or a zip with "extract": true) saved in Roms/<system>/
+install_game() {
+	id=$1
+	name=$(app_field "$id" name)
+	version=$(app_field "$id" version)
+	system=$(app_field "$id" system)
+	file=$(app_field "$id" file)
+	case "$system$file" in
+		*/* | *..*) die "Bad catalog entry: $id" ;;
+	esac
+	[ -n "$system" ] && [ -n "$file" ] || die "Bad catalog entry: $id"
+	[ -d "$SDCARD/Emu/$system" ] || die "No emulator for $system on this device."
+	tmp="$workdir/$id.dl"
+	echo -e "\n${BLUE}Downloading $name...${NC}"
+	download_verified "$id" "$tmp"
+	status "install 100 Installing"
+	mkdir -p "$installed_dir" "$SDCARD/Roms/$system"
+	if [ "$(app_field "$id" extract)" = "true" ]; then
+		dest="Roms/$system/${file%.*}"
+		mkdir -p "$SDCARD/$dest"
+		unzip -o -q "$tmp" -d "$SDCARD/$dest" || {
+			rm -f "$tmp"
+			die "Could not unpack the game."
+		}
+		(cd "$SDCARD" && find "$dest" -type f) > "$installed_dir/$id.files"
+		rm -f "$tmp"
+	else
+		mv -f "$tmp" "$SDCARD/Roms/$system/$file"
+		echo "Roms/$system/$file" > "$installed_dir/$id.files"
+	fi
+	echo -n "$version" > "$installed_dir/$id.version"
+	rm -f "$SDCARD/Roms/$system/${system}_cache6.db"
+	echo -e "${GREEN}$name installed.${NC}"
+	status "done 100 Installed"
+	pause
+}
+
+remove_game() {
+	id=$1
+	list="$installed_dir/$id.files"
+	if [ -f "$list" ]; then
+		while IFS= read -r f; do
+			case "$f" in
+				Roms/*/*) case "$f" in *..*) continue ;; esac ;;
+				*) continue ;;
+			esac
+			rm -f "$SDCARD/$f"
+			d=$(dirname "$f")
+			case "$d" in Roms/*/*) rmdir "$SDCARD/$d" 2> /dev/null ;; esac
+			rm -f "$SDCARD/$(echo "$f" | cut -d/ -f1-2)/$(echo "$f" | cut -d/ -f2)_cache6.db"
+		done < "$list"
+	fi
 	rm -f "$list" "$installed_dir/$id.version"
 	echo -e "${GREEN}Removed.${NC}"
 	status "done 100 Removed"
@@ -426,6 +484,7 @@ show_app() {
 		Install | Update | Reinstall)
 			case "$id" in
 				port-*) install_port "$id" ;;
+				game-*) install_game "$id" ;;
 				theme-*) install_theme "$id" ;;
 				*) install_app "$id" ;;
 			esac
@@ -434,6 +493,7 @@ show_app() {
 		Remove)
 			case "$id" in
 				port-*) remove_port "$id" ;;
+				game-*) remove_game "$id" ;;
 				theme-*) remove_theme "$id" ;;
 				*) remove_app "$id" ;;
 			esac
@@ -512,6 +572,7 @@ run_command() {
 		install)
 			case "$2" in
 				port-*) install_port "$2" > /dev/null ;;
+				game-*) install_game "$2" > /dev/null ;;
 				theme-*) install_theme "$2" > /dev/null ;;
 				*) install_app "$2" > /dev/null ;;
 			esac
@@ -519,6 +580,7 @@ run_command() {
 		remove)
 			case "$2" in
 				port-*) remove_port "$2" > /dev/null ;;
+				game-*) remove_game "$2" > /dev/null ;;
 				theme-*) remove_theme "$2" > /dev/null ;;
 				*) remove_app "$2" > /dev/null ;;
 			esac

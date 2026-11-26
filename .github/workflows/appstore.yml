@@ -50,7 +50,7 @@ jobs:
         sudo chown -R "$(id -u):$(id -g)" .
     - name: Build packages and catalog
       run: |
-        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json themes.json
+        appstore/build_catalog.sh out "https://github.com/${{ github.repository }}/releases/download/appstore" ports.json themes.json appstore/homebrew.json
         cat out/catalog.json
     - name: Publish to the "appstore" release
       if: github.event_name != 'pull_request'

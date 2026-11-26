@@ -66,3 +66,19 @@ Lange lister blar opp og ned, ikke sidelengs. Forsiden viser noen få elementer 
 ```sh
 appstore/build_catalog.sh /tmp/out "file:///tmp/out"
 ```
+
+## Game Store: homebrew games
+
+`homebrew.json` lists homebrew games for the Game Store (`App/GameStore`, which runs `appStore --games`).
+Files are downloaded straight from the author's or archive's own link on the device, never re-hosted by us,
+because every game has its own licence. One entry:
+
+```json
+{"id": "game-<slug>", "type": "game", "name": "...", "author": "...", "description": "...",
+ "version": "1.0", "system": "NES", "url": "https://...", "sha256": "...", "size": 40976,
+ "file": "<name>.nes", "extract": false, "image": "https://...", "genre": "Plattform"}
+```
+
+`system` is the `Emu/<system>` folder the game needs: the Game Store hides games for systems
+the device has no emulator for, and Select filters by system. `file` is the name saved in
+`Roms/<system>/`; with `"extract": true` the download is a zip unpacked into `Roms/<system>/<file without extension>/`.

@@ -67,7 +67,8 @@
 
 typedef enum { KIND_APP,
                KIND_PORT,
-               KIND_THEME } Kind;
+               KIND_THEME,
+               KIND_GAME } Kind; // KIND_GAME = homebrew ROM (Game Store)
 
 typedef enum { IMG_CARD,
                IMG_TILE,
@@ -84,6 +85,7 @@ typedef struct {
     char version[48];
     char genre[64];
     char image[512];
+    char system[16]; // Emu/ folder the game needs (Game Store), e.g. "GBA" or "PORTS"
     Kind kind;
     bool needs_files;
     int featured; // rank in the theme list's "featured" order, 0 = not featured
@@ -104,6 +106,29 @@ typedef enum { TAB_FEATURED,
                TAB_INSTALLED,
                TAB_COUNT } Tab;
 static const char *TAB_NAMES[TAB_COUNT] = {"Utvalgt", "Apper", "Porter", "Temaer", "Installert"};
+
+// Game Store mode (--games): ports and homebrew games, filtered by the
+// systems this device has emulators for. The App Store keeps apps and themes.
+static bool games = false;
+static const Tab APP_TABS[] = {TAB_FEATURED, TAB_APPS, TAB_THEMES, TAB_INSTALLED};
+static const Tab GAME_TABS[] = {TAB_FEATURED, TAB_PORTS, TAB_APPS, TAB_INSTALLED};
+#define TAB_N 4
+#define MAX_SYSTEMS 48
+static char systems[MAX_SYSTEMS][16];
+static int system_count = 0;
+static int sys_filter = -1; // index in systems[], -1 = all
+
+static const Tab *tabs(void) { return games ? GAME_TABS : APP_TABS; }
+
+static const char *tab_name(Tab t)
+{
+    return games && t == TAB_APPS ? "Homebrew" : TAB_NAMES[t];
+}
+
+static bool passes_filter(const Item *it)
+{
+    return !games || sys_filter < 0 || !strcmp(it->system, systems[sys_filter]);
+}
 
 // Rows on the front page
 typedef enum { ROW_HERO,
@@ -382,8 +407,21 @@ static bool load_catalog(void)
             if (!ok)
                 continue;
         }
+        const char *type = json_str(a, "type");
+        bool game_item = !strcmp(type, "port") || !strcmp(type, "game");
+        if (game_item != games)
+            continue;
+        const char *sys = !strcmp(type, "port") ? "PORTS" : json_str(a, "system");
+        if (games) {
+            char emu[400];
+            snprintf(emu, sizeof(emu), "%s/Emu/%s", sdcard, sys);
+            struct stat st;
+            if (!*sys || strchr(sys, '/') || stat(emu, &st) != 0 || !S_ISDIR(st.st_mode))
+                continue; // no emulator for this system on the device
+        }
         Item *it = &items[item_count++];
         memset(it, 0, sizeof(*it));
+        copy_str(it->system, sizeof(it->system), sys);
         copy_str(it->id, sizeof(it->id), json_str(a, "id"));
         copy_str(it->name, sizeof(it->name), json_str(a, "name"));
         copy_str(it->author, sizeof(it->author), json_str(a, "author"));
@@ -391,8 +429,7 @@ static bool load_catalog(void)
         copy_str(it->version, sizeof(it->version), json_str(a, "version"));
         copy_str(it->genre, sizeof(it->genre), json_str(a, "genre"));
         copy_str(it->image, sizeof(it->image), json_str(a, "image"));
-        const char *type = json_str(a, "type");
-        it->kind = !strcmp(type, "port") ? KIND_PORT : (!strcmp(type, "theme") ? KIND_THEME : KIND_APP);
+        it->kind = !strcmp(type, "port") ? KIND_PORT : (!strcmp(type, "game") ? KIND_GAME : (!strcmp(type, "theme") ? KIND_THEME : KIND_APP));
         it->needs_files = cJSON_IsTrue(cJSON_GetObjectItem(a, "requires_game_files"));
         cJSON *num = cJSON_GetObjectItem(a, "size");
         it->size = cJSON_IsNumber(num) ? (long)num->valuedouble : 0;
@@ -409,10 +446,22 @@ static bool load_catalog(void)
     cJSON_Delete(root);
     qsort(items, item_count, sizeof(Item), cmp_items);
 
-    // Featured item: a free port that changes every day
+    // Systems present in the list, for the Select filter
+    system_count = 0;
+    sys_filter = -1;
+    for (int i = 0; games && i < item_count; i++) {
+        bool seen = false;
+        for (int j = 0; j < system_count; j++)
+            seen = seen || !strcmp(systems[j], items[i].system);
+        if (!seen && system_count < MAX_SYSTEMS)
+            copy_str(systems[system_count++], sizeof(systems[0]), items[i].system);
+    }
+
+    // Featured item that changes every day: a free port or homebrew game, or an app
     int free_ports[MAX_ITEMS], n = 0;
     for (int i = 0; i < item_count; i++)
-        if (items[i].kind == KIND_PORT && !items[i].needs_files)
+        if (games ? ((items[i].kind == KIND_PORT && !items[i].needs_files) || items[i].kind == KIND_GAME)
+                  : items[i].kind == KIND_APP)
             free_ports[n++] = i;
     if (n) {
         time_t now = time(NULL);
@@ -431,7 +480,9 @@ static int tab_list(Tab t, int *out)
     int n = 0;
     for (int i = 0; i < item_count; i++) {
         Item *it = &items[i];
-        bool ok = (t == TAB_APPS && it->kind == KIND_APP) || (t == TAB_PORTS && it->kind == KIND_PORT) ||
+        if (!passes_filter(it))
+            continue;
+        bool ok = (t == TAB_APPS && it->kind == (games ? KIND_GAME : KIND_APP)) || (t == TAB_PORTS && it->kind == KIND_PORT) ||
                   (t == TAB_THEMES && is_theme(it)) || (t == TAB_INSTALLED && *it->installed);
         if (ok)
             out[n++] = i;
@@ -449,9 +500,11 @@ static int shelf_list(RowKind row, int *out)
     int n = 0;
     for (int i = 0; i < item_count; i++) {
         Item *it = &items[i];
+        if (!passes_filter(it))
+            continue;
         if (row == ROW_PORTS && it->kind == KIND_PORT && !it->needs_files && i != hero)
             out[n++] = i;
-        if (row == ROW_APPS && (it->kind == KIND_APP || (it->kind == KIND_PORT && it->needs_files)))
+        if (row == ROW_APPS && it->kind == (games ? KIND_GAME : KIND_APP) && i != hero)
             out[n++] = i;
         if (row == ROW_THEMES && is_theme(it) && it->featured > 0)
             out[n++] = i;
@@ -498,7 +551,7 @@ static void build_feat_rows(void)
     int list[MAX_ITEMS];
     feat_row_count = 0;
     for (int i = 0; i < 4; i++) {
-        if (all[i] == ROW_HERO ? hero >= 0 : shelf_list(all[i], list) > 0)
+        if (all[i] == ROW_HERO ? hero >= 0 && passes_filter(&items[hero]) : shelf_list(all[i], list) > 0)
             feat_rows[feat_row_count++] = all[i];
     }
 }
@@ -552,24 +605,25 @@ static void parse_status(char *state, int *pct, char *txt, size_t txt_n)
 
 static void draw_topbar(void)
 {
-    // Logo without subtitle: five tabs need the room
-    soup_logo("");
+    // The app's own name, not "onionsoup"
+    soup_title(games ? "Game" : "App", "Store");
 
     int tx = SCREEN_W - 14;
-    for (int i = TAB_COUNT - 1; i >= 0; i--)
-        tx -= text_w(f17, TAB_NAMES[i]) + (i ? 22 : 0);
-    for (int i = 0; i < TAB_COUNT; i++) {
-        int w = text_w(f17, TAB_NAMES[i]);
+    for (int j = TAB_N - 1; j >= 0; j--)
+        tx -= text_w(f17, tab_name(tabs()[j])) + (j ? 22 : 0);
+    for (int j = 0; j < TAB_N; j++) {
+        int i = tabs()[j];
+        int w = text_w(f17, tab_name(i));
         if (i == (int)tab && detail < 0) {
             fill_round(tx - 9, 12, w + 18, 28, 14, C_ACCENT);
-            text(f17, TAB_NAMES[i], tx, 15, C_DARK);
+            text(f17, tab_name(i), tx, 15, C_DARK);
         }
         else if (i == (int)tab) {
             fill_round(tx - 9, 12, w + 18, 28, 14, C_PANEL);
-            text(f17, TAB_NAMES[i], tx, 15, C_ACCENT);
+            text(f17, tab_name(i), tx, 15, C_ACCENT);
         }
         else {
-            text(f17, TAB_NAMES[i], tx, 15, C_GREY);
+            text(f17, tab_name(i), tx, 15, C_GREY);
         }
         tx += w + 22;
     }
@@ -655,7 +709,7 @@ static void draw_hero(int y0)
     text_wrap(f15, it->description, 172, y0 + 84, SCREEN_W - 196, 20, 2, C_SOFT);
     char meta[128], sz[32];
     human_size(it->size, sz, sizeof(sz));
-    snprintf(meta, sizeof(meta), "%s  ·  %s", *it->genre ? it->genre : "Porter", sz);
+    snprintf(meta, sizeof(meta), "%s  ·  %s", *it->genre ? it->genre : (*it->system ? it->system : "App"), sz);
     text_fit(f15, meta, 172, y0 + 126, SCREEN_W - 196, C_GREY);
     const char *btn = *it->installed ? "Installert" : "Installer";
     int bw = text_w(f19, btn) + 40;
@@ -667,6 +721,11 @@ static void draw_hero(int y0)
 
 static void draw_featured(void)
 {
+    if (feat_row_count == 0) {
+        const char *empty = "Ingen spill for dette systemet.";
+        text(f17, empty, (SCREEN_W - text_w(f17, empty)) / 2, 230, C_GREY);
+        return;
+    }
     // Scroll so the selected row fits between the top bar and the hints
     int y_sel = 0;
     for (int r = 0; r < feat_row; r++)
@@ -678,7 +737,7 @@ static void draw_featured(void)
     if (feat_row == 0)
         scroll = 0;
 
-    static const char *titles[] = {"", "Gratis porter", "Populære temaer", "Apper og motorer"};
+    const char *titles[] = {"", "Gratis porter", "Populære temaer", games ? "Homebrew" : "Apper"};
     int y = TOP_H - scroll;
     for (int r = 0; r < feat_row_count; r++) {
         RowKind row = feat_rows[r];
@@ -840,9 +899,14 @@ static void draw_tab_list(void)
     int list[MAX_ITEMS];
     int n = tab_list(tab, list);
     clamp_view(n);
-    draw_list_header(TAB_NAMES[tab], n, n ? list[sel[tab]] : 0);
+    char title[64];
+    if (sys_filter >= 0)
+        snprintf(title, sizeof(title), "%s · %s", tab_name(tab), systems[sys_filter]);
+    else
+        copy_str(title, sizeof(title), tab_name(tab));
+    draw_list_header(title, n, n ? list[sel[tab]] : 0);
     if (n == 0) {
-        const char *empty = tab == TAB_INSTALLED ? "Ingenting installert fra App Store ennå." : "Ingenting her ennå.";
+        const char *empty = tab == TAB_INSTALLED ? (games ? "Ingenting installert fra Game Store ennå." : "Ingenting installert fra App Store ennå.") : "Ingenting her ennå.";
         text(f17, empty, (SCREEN_W - text_w(f17, empty)) / 2, 230, C_GREY);
         return;
     }
@@ -1033,14 +1097,20 @@ static void draw(void)
         draw_hints(k, l, n);
     }
     else if (tab == TAB_FEATURED) {
-        const char *k[] = {"A", "L/R", "B"};
-        const char *l[] = {"Åpne", "Fane", "Avslutt"};
-        draw_hints(k, l, 3);
+        const char *k[] = {"A", "L/R", "SELECT", "B"};
+        const char *l[] = {"Åpne", "Fane", "System", "Avslutt"};
+        if (!games)
+            k[2] = "B", l[2] = "Avslutt";
+        draw_hints(k, l, games ? 4 : 3);
     }
     else {
-        const char *k[] = {"A", "←→", "L2/R2", "L/R", "B"};
-        const char *l[] = {"Åpne", tab_is_grid(tab) ? "Flytt" : "Side", "Bokstav", "Fane", "Avslutt"};
-        draw_hints(k, l, 5);
+        const char *k[] = {"A", "←→", "L2/R2", "L/R", "SELECT", "B"};
+        const char *l[] = {"Åpne", tab_is_grid(tab) ? "Flytt" : "Side", "Bokstav", "Fane", "System", "Avslutt"};
+        if (games)
+            k[4] = "SELECT", l[4] = "System";
+        else
+            k[4] = "B", l[4] = "Avslutt";
+        draw_hints(k, l, games ? 6 : 5);
     }
     draw_message();
     SDL_BlitSurface(screen, NULL, video, NULL);
@@ -1117,6 +1187,8 @@ static void on_key_detail(SDLKey key)
 
 static void on_key_featured(SDLKey key)
 {
+    if (feat_row_count == 0)
+        return;
     RowKind row = feat_rows[feat_row];
     int list[MAX_ITEMS];
     int n = row == ROW_HERO ? 0 : shelf_list(row, list);
@@ -1183,7 +1255,19 @@ static void on_key(SDLKey key)
         return;
     }
     if (key == SW_BTN_L1 || key == SW_BTN_R1) {
-        tab = (tab + (key == SW_BTN_R1 ? 1 : TAB_COUNT - 1)) % TAB_COUNT;
+        int j = 0;
+        while (j < TAB_N && tabs()[j] != tab)
+            j++;
+        tab = tabs()[(j + (key == SW_BTN_R1 ? 1 : TAB_N - 1)) % TAB_N];
+        return;
+    }
+    if (games && key == SW_BTN_SELECT && system_count > 0) {
+        sys_filter = sys_filter + 1 >= system_count ? -1 : sys_filter + 1;
+        for (int t = 0; t < TAB_COUNT; t++)
+            sel[t] = top[t] = 0;
+        feat_row = feat_col = 0;
+        build_feat_rows();
+        show_message(sys_filter < 0 ? "Alle systemer" : systems[sys_filter], 1200);
         return;
     }
     if (tab == TAB_FEATURED)
@@ -1280,10 +1364,11 @@ static void job_finished(int code)
         show_message("Installert!", 2500);
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
     signal(SIGPIPE, SIG_IGN);
     const char *env;
+    games = (argc > 1 && !strcmp(argv[1], "--games")) || getenv("GAMESTORE");
     copy_str(sdcard, sizeof(sdcard), (env = getenv("SDCARD")) ? env : "/mnt/SDCARD");
     snprintf(workdir, sizeof(workdir), "%s/.tmp_update/appstore", sdcard);
     if ((env = getenv("APPSTORE_SH")))

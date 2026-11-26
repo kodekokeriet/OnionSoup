@@ -1,13 +1,14 @@
 #!/bin/sh
 # Build App Store packages and catalog.json from appstore/apps/<id>/.
 # Each app folder holds app.json (store metadata) plus the files that go in App/<id>/ on the SD card.
-# Usage: build_catalog.sh <out_dir> <download_base_url> [ports.json] [themes.json]
+# Usage: build_catalog.sh <out_dir> <download_base_url> [ports.json] [themes.json] [homebrew.json]
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 out=$1
 base=$2
 ports=${3:-}
 themes=${4:-}
+homebrew=${5:-}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
 entries=""
@@ -33,7 +34,7 @@ for dir in "$here"/apps/*/; do
 done
 # Apps first, then ports and themes
 echo '[]' > "$out/.extra.json"
-for f in "$ports" "$themes"; do
+for f in "$ports" "$themes" "$homebrew"; do
 	[ -n "$f" ] || continue
 	jq -s '.[0] + .[1]' "$out/.extra.json" "$f" > "$out/.extra.tmp" && mv "$out/.extra.tmp" "$out/.extra.json"
 done

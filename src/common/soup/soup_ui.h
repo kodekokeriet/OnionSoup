@@ -310,4 +310,12 @@ static void soup_logo(const char *subtitle)
     text(f17, subtitle, x, 16, C_GREY);
 }
 
+// Header with the app's own name, e.g. soup_title("Game", "Store")
+static void soup_title(const char *first, const char *second)
+{
+    fill(0, 0, SCREEN_W, TOP_H, C_BAR);
+    text(f24, first, 18, 10, C_ACCENT);
+    text(f24, second, 18 + text_w(f24, first) + 6, 10, C_WHITE);
+}
+
 #endif // SOUP_UI_H__
