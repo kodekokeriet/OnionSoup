@@ -26,15 +26,15 @@
 
 #include <SDL/SDL.h>
 #include <SDL/SDL_ttf.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
-#include <fcntl.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include <libavcodec/avcodec.h>
@@ -92,8 +92,8 @@ static volatile bool dec_failed = false;
 static volatile bool opened = false;
 static char dec_error[200] = "";
 
-static double open_start = 0;   // position (s) the current stream was opened at
-static bool local_mode = false; // playing a downloaded file
+static double open_start = 0;      // position (s) the current stream was opened at
+static bool local_mode = false;    // playing a downloaded file
 static char grow_marker[400] = ""; // the file is still downloading while this exists
 static AVIOContext *grow_io = NULL;
 static int grow_fd = -1;

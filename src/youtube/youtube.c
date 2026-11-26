@@ -80,7 +80,11 @@ typedef struct {
     char error[160];
 } Tab;
 
-enum { T_POPULAR, T_SEARCH, T_SAVED, T_HISTORY, T_COUNT };
+enum { T_POPULAR,
+       T_SEARCH,
+       T_SAVED,
+       T_HISTORY,
+       T_COUNT };
 static Tab tabs[T_COUNT] = {{"Populært"}, {"Søk"}, {"Lagret"}, {"Historikk"}};
 static int cur = T_POPULAR;
 
