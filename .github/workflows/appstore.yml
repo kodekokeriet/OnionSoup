@@ -12,6 +12,7 @@ on:
       - 'src/jellyfin/**'
       - 'src/jfplayer/**'
       - 'src/bookReader/**'
+      - 'src/miipc/**'
       - 'src/common/soup/**'
       - '.github/workflows/appstore.yml'
   pull_request:
@@ -20,6 +21,7 @@ on:
       - 'src/jellyfin/**'
       - 'src/jfplayer/**'
       - 'src/bookReader/**'
+      - 'src/miipc/**'
       - 'src/common/soup/**'
       - '.github/workflows/appstore.yml'
 
