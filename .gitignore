@@ -43,4 +43,7 @@ src/cpuclock/cpuclock
 appstore/apps/*/jellyfin
 appstore/apps/*/jfplayer
 appstore/apps/*/bokhylle
+appstore/apps/MiiPC/miipc
+appstore/apps/MiiPC/samples/
+src/miipc/build/
 src/bookReader/bokhylle
