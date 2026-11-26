@@ -1,0 +1,6 @@
+{
+"label":"MiiPC",
+"icon":"icon.png",
+"launch":"launch.sh",
+"description":"Sample-based groovebox"
+}
