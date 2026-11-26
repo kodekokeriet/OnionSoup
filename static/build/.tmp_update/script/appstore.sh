@@ -7,8 +7,9 @@
 # Without arguments it runs a terminal menu. The graphical App Store (bin/appStore) uses the
 # commands below instead and reads progress from $workdir/status ("<state> <percent> <text>"):
 #   appstore.sh fetch            enable wifi and download the catalog
-#   appstore.sh install <id>     download, verify and install an app or port
-#   appstore.sh remove <id>      remove an app or port installed by the App Store
+#   appstore.sh install <id>     download, verify and install an app, port or theme
+#   appstore.sh remove <id>      remove an app, port or theme installed by the App Store
+#   appstore.sh apply <id> [dir] switch to an installed theme (folder <dir> of a theme pack)
 #   appstore.sh image <id>       download the cover image to $workdir/img/<id>.png
 
 SDCARD=${SDCARD:-/mnt/SDCARD}
@@ -19,6 +20,7 @@ SHELLECT=${SHELLECT:-$sysdir/script/shellect.sh}
 workdir=$sysdir/appstore
 catalog=$workdir/catalog.json
 appdir=$SDCARD/App
+themedir=$SDCARD/Themes
 
 RED='\033[1;31m'
 GREEN='\033[1;32m'
@@ -42,7 +44,7 @@ pause() {
 
 die() {
 	if [ "$batch" = "1" ]; then
-		echo "error 0 $(echo -e "$1" | tr '\n' ' ')" > "$status_file"
+		echo "error 0 $(printf '%b' "$1" | tr '\n' ' ')" > "$status_file"
 		exit 1
 	fi
 	echo -e "${RED}$1${NC}"
@@ -68,6 +70,22 @@ enable_wifi() {
 		sleep 3
 		clear
 	fi
+}
+
+sha1_of() {
+	if command -v sha1sum > /dev/null 2>&1; then
+		sha1sum | awk '{print $1}'
+	else
+		openssl dgst -sha1 | awk '{print $NF}'
+	fi
+}
+
+# Git blob id of a file: sha1 of "blob <size>\0" + content
+git_sha1_of() {
+	{
+		printf 'blob %s\000' "$(wc -c < "$1" | tr -d ' ')"
+		cat "$1"
+	} | sha1_of
 }
 
 sha256_of() {
@@ -98,14 +116,14 @@ installed_dir=$workdir/installed
 # Version of an installed app or port, empty if not installed by the App Store
 installed_version() {
 	case "$1" in
-		port-*) cat "$installed_dir/$1.version" 2> /dev/null ;;
+		port-* | theme-*) cat "$installed_dir/$1.version" 2> /dev/null ;;
 		*) cat "$appdir/$1/.appstore_version" 2> /dev/null ;;
 	esac
 }
 
 # Menu group of a catalog entry
 group_of() {
-	jq -r --arg id "$1" '.apps[] | select(.id == $id) | if .type == "port" then .category else "Apps" end' "$catalog"
+	jq -r --arg id "$1" '.apps[] | select(.id == $id) | if .type == "app" then "Apps" else .category end' "$catalog"
 }
 
 app_field() {
@@ -114,14 +132,14 @@ app_field() {
 
 # Groups present in the catalog, apps first
 group_lines() {
-	jq -r '[.apps[] | if .type == "port" then .category else "Apps" end] | unique | sort_by(. != "Apps") | .[]' "$catalog"
+	jq -r '[.apps[] | if .type == "app" then "Apps" else .category end] | unique | sort_by(. != "Apps") | .[]' "$catalog"
 }
 
 # One line per entry in group $1: "<id>|<label>"
 app_lines() {
 	model=$(device_model)
 	jq -r --arg m "$model" --arg g "$1" '.apps[]
-		| select((if .type == "port" then .category else "Apps" end) == $g)
+		| select((if .type == "app" then "Apps" else .category end) == $g)
 		| select(($m == "") or (.devices == null) or (.devices | index($m)))
 		| .id + "|" + .name + "|" + .version' "$catalog" |
 		while IFS='|' read -r id name version; do
@@ -142,6 +160,7 @@ download_verified() {
 	out=$2
 	url=$(app_field "$id" url)
 	sha=$(app_field "$id" sha256)
+	git_sha=$(app_field "$id" git_sha1)
 	size=$(app_field "$id" size)
 	[ -n "$url" ] || die "Unknown app: $id"
 	need_mb=$(((${size:-0} * 3) / 1048576 + 20))
@@ -170,7 +189,15 @@ download_verified() {
 			die "Download failed."
 		}
 	fi
-	if [ "$(sha256_of "$out")" != "$sha" ]; then
+	if [ -n "$sha" ]; then
+		actual=$(sha256_of "$out")
+	elif [ -n "$git_sha" ]; then
+		sha=$git_sha
+		actual=$(git_sha1_of "$out")
+	else
+		actual=""
+	fi
+	if [ "$actual" != "$sha" ]; then
 		rm -f "$out"
 		die "Checksum mismatch, the download is corrupt."
 	fi
@@ -237,6 +264,85 @@ remove_port() {
 	echo -e "${GREEN}Removed.${NC}"
 	status "done 100 Removed"
 	pause
+}
+
+# Active theme folder name, e.g. "Analogue by Aemiii91"
+active_theme() {
+	t=$(cat "$sysdir/config/active_theme" 2> /dev/null)
+	[ -n "$t" ] || t=$(jq -r '.theme // empty' "$SDCARD/.tmp_update/config/system.json" 2> /dev/null)
+	basename "$t" 2> /dev/null
+}
+
+# Theme folders an installed theme added to Themes/, one per line
+theme_dirs() {
+	cat "$installed_dir/$1.dirs" 2> /dev/null
+}
+
+install_theme() {
+	id=$1
+	name=$(app_field "$id" name)
+	version=$(app_field "$id" version)
+	zip="$workdir/$id.zip"
+
+	echo -e "\n${BLUE}Downloading $name...${NC}"
+	download_verified "$id" "$zip"
+
+	echo "Installing..."
+	status "install 100 Installing"
+	mkdir -p "$installed_dir" "$themedir"
+	# Top-level folders in the zip, keeping only real theme folders
+	7z l -slt "$zip" | awk -F' = ' '/^Path = / { p = $2; sub(/[\/\\].*/, "", p); if (p != "") print p }' | sort -u |
+		while IFS= read -r d; do
+			case "$d" in
+				.* | *..*) ;;
+				*) echo "$d" ;;
+			esac
+		done > "$installed_dir/$id.dirs.tmp"
+	if [ ! -s "$installed_dir/$id.dirs.tmp" ]; then
+		rm -f "$zip" "$installed_dir/$id.dirs.tmp"
+		die "The theme package is empty."
+	fi
+	if ! 7z x -aoa -y -o"$themedir" "$zip" > /dev/null 2>&1; then
+		rm -f "$zip" "$installed_dir/$id.dirs.tmp"
+		die "Could not unpack the theme."
+	fi
+	mv "$installed_dir/$id.dirs.tmp" "$installed_dir/$id.dirs"
+	echo -n "$version" > "$installed_dir/$id.version"
+	rm -f "$zip"
+	echo -e "${GREEN}$name installed.${NC}"
+	echo "Pick it in Themes, or choose it in the App Store."
+	status "done 100 Installed"
+	pause
+}
+
+remove_theme() {
+	id=$1
+	active=$(active_theme)
+	if [ -n "$active" ] && theme_dirs "$id" | grep -qxF -- "$active"; then
+		die "This theme is in use.\nSwitch to another theme first."
+	fi
+	theme_dirs "$id" | while IFS= read -r d; do
+		case "$d" in
+			"" | .* | */* | *..*) continue ;;
+		esac
+		rm -rf "$themedir/$d" "$themedir/.previews/$d"
+	done
+	rm -f "$installed_dir/$id.dirs" "$installed_dir/$id.version"
+	echo -e "${GREEN}Removed.${NC}"
+	status "done 100 Removed"
+	pause
+}
+
+apply_theme() {
+	id=$1
+	d=${2:-$(theme_dirs "$id" | head -n 1)}
+	theme_dirs "$id" | grep -qxF -- "$d" && [ -f "$themedir/$d/config.json" ] || die "The theme is not installed."
+	status "install 100 Applying"
+	themeswitcher=${THEMESWITCHER:-$sysdir/bin/themeSwitcher}
+	"$themeswitcher" --apply "$d" > /dev/null 2>&1 || die "Could not switch theme."
+	sync
+	echo -e "${GREEN}Theme changed to $d.${NC}"
+	status "done 100 Applied"
 }
 
 install_app() {
@@ -310,6 +416,9 @@ show_app() {
 	else
 		choices="Update\nRemove\nBack"
 	fi
+	case "$id" in
+		theme-*) [ "$inst" != "" ] && choices="Use theme\n$choices" ;;
+	esac
 	pause
 	action=$(echo -e "$choices" | $SHELLECT -t "$name" -b "Press A to choose")
 	clear
@@ -317,12 +426,15 @@ show_app() {
 		Install | Update | Reinstall)
 			case "$id" in
 				port-*) install_port "$id" ;;
+				theme-*) install_theme "$id" ;;
 				*) install_app "$id" ;;
 			esac
 			;;
+		"Use theme") apply_theme "$id" && echo "Restart the menu to see it." && pause ;;
 		Remove)
 			case "$id" in
 				port-*) remove_port "$id" ;;
+				theme-*) remove_theme "$id" ;;
 				*) remove_app "$id" ;;
 			esac
 			;;
@@ -400,15 +512,18 @@ run_command() {
 		install)
 			case "$2" in
 				port-*) install_port "$2" > /dev/null ;;
+				theme-*) install_theme "$2" > /dev/null ;;
 				*) install_app "$2" > /dev/null ;;
 			esac
 			;;
 		remove)
 			case "$2" in
 				port-*) remove_port "$2" > /dev/null ;;
+				theme-*) remove_theme "$2" > /dev/null ;;
 				*) remove_app "$2" > /dev/null ;;
 			esac
 			;;
+		apply) apply_theme "$2" "$3" > /dev/null ;;
 		image) fetch_image "$2" ;;
 		*)
 			echo "unknown command: $1" >&2

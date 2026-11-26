@@ -1,14 +1,18 @@
 // OnionSoup App Store: graphical front end for .tmp_update/script/appstore.sh
 //
 // The shell script does all network and file work (fetch, install, remove,
-// image) and reports progress in <workdir>/status. This program draws the
-// store and runs the script in the background.
+// apply, image) and reports progress in <workdir>/status. This program draws
+// the store and runs the script in the background.
+//
+// Long lists scroll up and down only: the small screen makes sideways
+// scrolling hard to follow. Shelves on the front page show a few items and a
+// "Se alle" tile that opens the full list.
 //
 // Environment overrides for testing on a PC:
 //   SDCARD              SD card root (default /mnt/SDCARD)
 //   APPSTORE_SH         path to appstore.sh
 //   APPSTORE_FONT       TTF font
-//   APPSTORE_SCRIPT     scripted input, e.g. "R R D A shot:out.bmp wait:500"
+//   APPSTORE_SCRIPT     scripted input, e.g. "R1 R1 D A shot:out.bmp wait:500"
 
 #include <SDL/SDL.h>
 #include <SDL/SDL_image.h>
@@ -32,15 +36,45 @@
 #include "system/keymap_sw.h"
 
 #define MAX_ITEMS 512
+#define MAX_VARIANTS 12
+#define MAX_LOADED 40 // items with scaled pictures kept in memory
 
-#define CARD_W 100
-#define CARD_H 140
-#define SHELF_W 88
-#define SHELF_H 124
+// Portrait covers (apps and ports)
+#define CARD_W 88
+#define CARD_H 124
+#define ROW_W 36
+#define ROW_H 50
 #define HERO_W 128
 #define HERO_H 180
 #define DETAIL_W 180
 #define DETAIL_H 253
+// Landscape previews (themes, 4:3 like the screen)
+#define TCARD_W 128
+#define TCARD_H 96
+#define TTILE_W 180
+#define TTILE_H 135
+#define TROW_W 56
+#define TROW_H 42
+#define TDETAIL_W 256
+#define TDETAIL_H 192
+
+#define LIST_Y (TOP_H + 44)
+#define LIST_ROW_H 58
+#define LIST_ROWS 6
+#define TGRID_COLS 3
+#define TGRID_ROWS 2
+#define TGRID_ROW_H 172
+
+typedef enum { KIND_APP,
+               KIND_PORT,
+               KIND_THEME } Kind;
+
+typedef enum { IMG_CARD,
+               IMG_TILE,
+               IMG_ROW,
+               IMG_HERO,
+               IMG_DETAIL,
+               IMG_KINDS } ImgKind;
 
 typedef struct {
     char id[128];
@@ -48,39 +82,53 @@ typedef struct {
     char author[128];
     char description[512];
     char version[48];
-    char category[64];
     char genre[64];
     char image[512];
-    bool is_port;
+    Kind kind;
     bool needs_files;
+    int featured; // rank in the theme list's "featured" order, 0 = not featured
     long size;
+    char variants[MAX_VARIANTS][128]; // theme folders inside a theme pack
+    int variant_count;
     char installed[48]; // installed version, "" if not installed
-    // image state: 0 = not requested, 1 = loading, 2 = loaded, 3 = failed
+    // image state: 0 = not requested, 1 = downloading, 2 = file ready, 3 = failed
     int img_state;
-    SDL_Surface *img_card, *img_shelf, *img_hero, *img_detail;
+    SDL_Surface *img[IMG_KINDS];
+    Uint32 img_used;
 } Item;
 
 typedef enum { TAB_FEATURED,
                TAB_APPS,
                TAB_PORTS,
+               TAB_THEMES,
                TAB_INSTALLED,
                TAB_COUNT } Tab;
-static const char *TAB_NAMES[TAB_COUNT] = {"Utvalgt", "Apper", "Porter", "Installert"};
+static const char *TAB_NAMES[TAB_COUNT] = {"Utvalgt", "Apper", "Porter", "Temaer", "Installert"};
+
+// Rows on the front page
+typedef enum { ROW_HERO,
+               ROW_PORTS,
+               ROW_THEMES,
+               ROW_APPS } RowKind;
 
 static Item items[MAX_ITEMS];
 static int item_count = 0;
 
 static char sdcard[256], workdir[300], script_path[300], font_path[300];
+static char active_theme[256] = "";
 
 // UI state
 static Tab tab = TAB_FEATURED;
-static int sel = 0, scroll_row = 0;    // grid tabs
-static int feat_row = 0, feat_col = 0; // featured tab: row 0 = hero, 1 = free ports, 2 = apps
-static int feat_scroll = 0;
+static int sel[TAB_COUNT], top[TAB_COUNT]; // selection and first visible row per tab
+static RowKind feat_rows[4];
+static int feat_row_count = 0;
+static int feat_row = 0, feat_col = 0;
 static int detail = -1; // item index shown in detail view, -1 = none
+static int variant = 0; // selected theme in a theme pack (detail view)
 static int hero = -1;
+static Uint32 frame = 0;
 
-// background job (install/remove/fetch)
+// background job (install/remove/apply/fetch)
 static pid_t job_pid = 0;
 static char job_kind[16] = "";
 static char job_status[256] = "";
@@ -102,28 +150,90 @@ static void show_message(const char *text, Uint32 ms)
     message_until = SDL_GetTicks() + ms;
 }
 
-/* ---------- drawing primitives ---------- */
+// Name without " (engine)" or " by author"
+static void short_name(const char *name, char *out, size_t n)
+{
+    copy_str(out, n, name);
+    char *cut = strstr(out, " (");
+    if (cut)
+        *cut = '\0';
+    cut = strstr(out, " by ");
+    if (cut)
+        *cut = '\0';
+}
+
+static bool is_theme(const Item *it)
+{
+    return it->kind == KIND_THEME;
+}
+
+static bool has_update(const Item *it)
+{
+    return *it->installed && strcmp(it->installed, it->version) != 0;
+}
+
+static void read_active_theme(void)
+{
+    char path[400], line[300];
+    snprintf(path, sizeof(path), "%s/.tmp_update/config/active_theme", sdcard);
+    read_file_line(path, line, sizeof(line));
+    int len = strlen(line);
+    while (len > 0 && line[len - 1] == '/')
+        line[--len] = '\0';
+    const char *base = strrchr(line, '/');
+    copy_str(active_theme, sizeof(active_theme), base ? base + 1 : line);
+}
+
+// Index of the variant in use, or -1 if this theme is not the active one
+static int active_variant(const Item *it)
+{
+    if (!is_theme(it) || !*it->installed || !*active_theme)
+        return -1;
+    for (int i = 0; i < it->variant_count; i++)
+        if (!strcmp(it->variants[i], active_theme))
+            return i;
+    return -1;
+}
 
 /* ---------- images ---------- */
 
-static void load_item_images(Item *it)
+static void img_size(const Item *it, ImgKind k, int *w, int *h)
 {
-    char path[512];
-    snprintf(path, sizeof(path), "%s/img/%s.png", workdir, it->id);
-    SDL_Surface *img = IMG_Load(path);
-    if (!img) {
-        it->img_state = 3;
-        return;
-    }
-    it->img_card = scale_rounded(img, CARD_W, CARD_H, 8);
-    it->img_shelf = scale_rounded(img, SHELF_W, SHELF_H, 8);
-    it->img_hero = scale_rounded(img, HERO_W, HERO_H, 10);
-    it->img_detail = scale_rounded(img, DETAIL_W, DETAIL_H, 12);
-    SDL_FreeSurface(img);
-    it->img_state = 2;
+    static const int portrait[IMG_KINDS][2] = {{CARD_W, CARD_H}, {CARD_W, CARD_H}, {ROW_W, ROW_H}, {HERO_W, HERO_H}, {DETAIL_W, DETAIL_H}};
+    static const int landscape[IMG_KINDS][2] = {{TCARD_W, TCARD_H}, {TTILE_W, TTILE_H}, {TROW_W, TROW_H}, {TCARD_W, TCARD_H}, {TDETAIL_W, TDETAIL_H}};
+    const int (*t)[2] = is_theme(it) ? landscape : portrait;
+    *w = t[k][0];
+    *h = t[k][1];
 }
 
-static pid_t spawn(const char *cmd, const char *arg)
+static void free_item_images(Item *it)
+{
+    for (int k = 0; k < IMG_KINDS; k++) {
+        if (it->img[k])
+            SDL_FreeSurface(it->img[k]);
+        it->img[k] = NULL;
+    }
+}
+
+// Keep memory use bounded: drop the pictures of the least recently drawn items
+static void evict_images(void)
+{
+    int loaded = 0, oldest = -1;
+    for (int i = 0; i < item_count; i++) {
+        bool any = false;
+        for (int k = 0; k < IMG_KINDS; k++)
+            any = any || items[i].img[k];
+        if (!any)
+            continue;
+        loaded++;
+        if (items[i].img_used != frame && (oldest < 0 || items[i].img_used < items[oldest].img_used))
+            oldest = i;
+    }
+    if (loaded > MAX_LOADED && oldest >= 0)
+        free_item_images(&items[oldest]);
+}
+
+static pid_t spawn(const char *cmd, const char *arg, const char *arg2)
 {
     pid_t pid = fork();
     if (pid == 0) {
@@ -132,7 +242,7 @@ static pid_t spawn(const char *cmd, const char *arg)
             dup2(devnull, 1);
             dup2(devnull, 2);
         }
-        execl("/bin/sh", "sh", script_path, cmd, arg, (char *)NULL);
+        execl("/bin/sh", "sh", script_path, cmd, arg, arg2, (char *)NULL);
         _exit(127);
     }
     return pid;
@@ -148,7 +258,7 @@ static void request_image(int idx)
     char path[512];
     snprintf(path, sizeof(path), "%s/img/%s.png", workdir, it->id);
     if (file_exists(path)) {
-        load_item_images(it);
+        it->img_state = 2;
         return;
     }
     if (!*it->image) {
@@ -159,7 +269,7 @@ static void request_image(int idx)
         return; // one download at a time; retried next frame
     it->img_state = 1;
     img_item = idx;
-    img_pid = spawn("image", it->id);
+    img_pid = spawn("image", it->id, NULL);
 }
 
 static void poll_image_job(void)
@@ -169,26 +279,49 @@ static void poll_image_job(void)
     int status;
     if (waitpid(img_pid, &status, WNOHANG) == img_pid) {
         img_pid = 0;
-        Item *it = &items[img_item];
-        if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
-            load_item_images(it);
-        else
-            it->img_state = 3;
+        items[img_item].img_state = WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 2 : 3;
         img_item = -1;
     }
 }
 
-// Card picture or a placeholder with the first letter
-static void draw_cover(Item *it, SDL_Surface *img, int x, int y, int w, int h)
+// Scaled picture of an item, or NULL while it is not available
+static SDL_Surface *item_img(int idx, ImgKind k)
 {
+    Item *it = &items[idx];
+    request_image(idx);
+    it->img_used = frame;
+    if (it->img[k] || it->img_state != 2)
+        return it->img[k];
+    char path[512];
+    snprintf(path, sizeof(path), "%s/img/%s.png", workdir, it->id);
+    SDL_Surface *src = IMG_Load(path);
+    if (!src) {
+        it->img_state = 3;
+        return NULL;
+    }
+    int w, h;
+    img_size(it, k, &w, &h);
+    it->img[k] = scale_rounded(src, w, h, k == IMG_ROW ? 5 : (k == IMG_DETAIL ? 12 : 8));
+    SDL_FreeSurface(src);
+    evict_images();
+    return it->img[k];
+}
+
+// Picture or a placeholder with the first letter
+static void draw_cover(int idx, ImgKind k, int x, int y)
+{
+    Item *it = &items[idx];
+    int w, h;
+    img_size(it, k, &w, &h);
+    SDL_Surface *img = item_img(idx, k);
     if (img) {
         SDL_Rect pos = {x, y};
         SDL_BlitSurface(img, NULL, screen, &pos);
         return;
     }
-    fill_round(x, y, w, h, 8, C_CARD);
+    fill_round(x, y, w, h, k == IMG_ROW ? 5 : 8, C_CARD);
     char letter[2] = {(char)toupper((unsigned char)it->name[0]), 0};
-    TTF_Font *f = w > 120 ? f34 : f24;
+    TTF_Font *f = w > 120 ? f34 : (w > 60 ? f24 : f17);
     text(f, letter, x + (w - text_w(f, letter)) / 2, y + h / 2 - TTF_FontHeight(f) / 2, C_ACCENT);
 }
 
@@ -203,18 +336,18 @@ static const char *json_str(cJSON *o, const char *key)
 static void refresh_installed(Item *it)
 {
     char path[600];
-    if (it->is_port)
-        snprintf(path, sizeof(path), "%s/installed/%s.version", workdir, it->id);
-    else
+    if (it->kind == KIND_APP)
         snprintf(path, sizeof(path), "%s/App/%s/.appstore_version", sdcard, it->id);
+    else
+        snprintf(path, sizeof(path), "%s/installed/%s.version", workdir, it->id);
     read_file_line(path, it->installed, sizeof(it->installed));
 }
 
 static int cmp_items(const void *a, const void *b)
 {
     const Item *x = a, *y = b;
-    if (x->is_port != y->is_port)
-        return x->is_port - y->is_port; // apps first
+    if (x->kind != y->kind)
+        return x->kind - y->kind; // apps, ports, themes
     if (x->needs_files != y->needs_files)
         return x->needs_files - y->needs_files; // free ports first
     return strcasecmp(x->name, y->name);
@@ -256,13 +389,21 @@ static bool load_catalog(void)
         copy_str(it->author, sizeof(it->author), json_str(a, "author"));
         copy_str(it->description, sizeof(it->description), json_str(a, "description"));
         copy_str(it->version, sizeof(it->version), json_str(a, "version"));
-        copy_str(it->category, sizeof(it->category), json_str(a, "category"));
         copy_str(it->genre, sizeof(it->genre), json_str(a, "genre"));
         copy_str(it->image, sizeof(it->image), json_str(a, "image"));
-        it->is_port = !strcmp(json_str(a, "type"), "port");
+        const char *type = json_str(a, "type");
+        it->kind = !strcmp(type, "port") ? KIND_PORT : (!strcmp(type, "theme") ? KIND_THEME : KIND_APP);
         it->needs_files = cJSON_IsTrue(cJSON_GetObjectItem(a, "requires_game_files"));
-        cJSON *size = cJSON_GetObjectItem(a, "size");
-        it->size = cJSON_IsNumber(size) ? (long)size->valuedouble : 0;
+        cJSON *num = cJSON_GetObjectItem(a, "size");
+        it->size = cJSON_IsNumber(num) ? (long)num->valuedouble : 0;
+        num = cJSON_GetObjectItem(a, "featured");
+        it->featured = cJSON_IsNumber(num) ? num->valueint : 0;
+        cJSON *v;
+        cJSON_ArrayForEach(v, cJSON_GetObjectItem(a, "variants"))
+        {
+            if (cJSON_IsString(v) && it->variant_count < MAX_VARIANTS)
+                copy_str(it->variants[it->variant_count++], sizeof(it->variants[0]), v->valuestring);
+        }
         refresh_installed(it);
     }
     cJSON_Delete(root);
@@ -271,7 +412,7 @@ static bool load_catalog(void)
     // Featured item: a free port that changes every day
     int free_ports[MAX_ITEMS], n = 0;
     for (int i = 0; i < item_count; i++)
-        if (items[i].is_port && !items[i].needs_files)
+        if (items[i].kind == KIND_PORT && !items[i].needs_files)
             free_ports[n++] = i;
     if (n) {
         time_t now = time(NULL);
@@ -283,37 +424,88 @@ static bool load_catalog(void)
     return item_count > 0;
 }
 
-/* ---------- lists per tab ---------- */
+/* ---------- lists ---------- */
 
 static int tab_list(Tab t, int *out)
 {
     int n = 0;
     for (int i = 0; i < item_count; i++) {
         Item *it = &items[i];
-        bool ok = (t == TAB_APPS && !it->is_port) || (t == TAB_PORTS && it->is_port) ||
-                  (t == TAB_INSTALLED && *it->installed);
+        bool ok = (t == TAB_APPS && it->kind == KIND_APP) || (t == TAB_PORTS && it->kind == KIND_PORT) ||
+                  (t == TAB_THEMES && is_theme(it)) || (t == TAB_INSTALLED && *it->installed);
         if (ok)
             out[n++] = i;
     }
     return n;
 }
 
-static int shelf_list(int row, int *out)
+static int cmp_featured(const void *a, const void *b)
+{
+    return items[*(const int *)a].featured - items[*(const int *)b].featured;
+}
+
+static int shelf_list(RowKind row, int *out)
 {
     int n = 0;
     for (int i = 0; i < item_count; i++) {
         Item *it = &items[i];
-        if (row == 1 && it->is_port && !it->needs_files && i != hero)
+        if (row == ROW_PORTS && it->kind == KIND_PORT && !it->needs_files && i != hero)
             out[n++] = i;
-        if (row == 2 && (!it->is_port || it->needs_files))
+        if (row == ROW_APPS && (it->kind == KIND_APP || (it->kind == KIND_PORT && it->needs_files)))
+            out[n++] = i;
+        if (row == ROW_THEMES && is_theme(it) && it->featured > 0)
             out[n++] = i;
     }
+    if (row == ROW_THEMES && n == 0) { // no featured list: show the first themes
+        for (int i = 0; i < item_count && n < 8; i++)
+            if (is_theme(&items[i]))
+                out[n++] = i;
+    }
+    if (row == ROW_THEMES)
+        qsort(out, n, sizeof(int), cmp_featured);
     return n;
+}
+
+static int shelf_slots(RowKind row)
+{
+    return row == ROW_THEMES ? 4 : 6;
+}
+
+// Items shown on a shelf; the last slot becomes "Se alle" when there are more
+static int shelf_shown(RowKind row, int n)
+{
+    return n <= shelf_slots(row) ? n : shelf_slots(row) - 1;
+}
+
+static bool shelf_has_more(RowKind row, int n)
+{
+    return n > shelf_slots(row);
+}
+
+static Tab shelf_tab(RowKind row)
+{
+    return row == ROW_PORTS ? TAB_PORTS : (row == ROW_THEMES ? TAB_THEMES : TAB_APPS);
+}
+
+static int row_height(RowKind row)
+{
+    return row == ROW_HERO ? 210 : (row == ROW_THEMES ? 168 : 184);
+}
+
+static void build_feat_rows(void)
+{
+    static const RowKind all[] = {ROW_HERO, ROW_PORTS, ROW_THEMES, ROW_APPS};
+    int list[MAX_ITEMS];
+    feat_row_count = 0;
+    for (int i = 0; i < 4; i++) {
+        if (all[i] == ROW_HERO ? hero >= 0 : shelf_list(all[i], list) > 0)
+            feat_rows[feat_row_count++] = all[i];
+    }
 }
 
 /* ---------- jobs ---------- */
 
-static void start_job(const char *kind, int idx)
+static void start_job(const char *kind, int idx, const char *arg2)
 {
     if (job_pid > 0)
         return;
@@ -323,7 +515,7 @@ static void start_job(const char *kind, int idx)
     snprintf(status_path, sizeof(status_path), "%s/status", workdir);
     remove(status_path);
     job_status[0] = '\0';
-    job_pid = spawn(kind, idx >= 0 ? items[idx].id : NULL);
+    job_pid = spawn(kind, idx >= 0 ? items[idx].id : NULL, arg2);
 }
 
 // Returns true when the job just finished
@@ -360,188 +552,325 @@ static void parse_status(char *state, int *pct, char *txt, size_t txt_n)
 
 static void draw_topbar(void)
 {
-    soup_logo("App Store");
+    // Logo without subtitle: five tabs need the room
+    soup_logo("");
 
-    int tx = SCREEN_W - 16;
+    int tx = SCREEN_W - 14;
     for (int i = TAB_COUNT - 1; i >= 0; i--)
-        tx -= text_w(f17, TAB_NAMES[i]) + (i ? 26 : 0);
+        tx -= text_w(f17, TAB_NAMES[i]) + (i ? 22 : 0);
     for (int i = 0; i < TAB_COUNT; i++) {
         int w = text_w(f17, TAB_NAMES[i]);
         if (i == (int)tab && detail < 0) {
-            fill_round(tx - 10, 12, w + 20, 28, 14, C_ACCENT);
+            fill_round(tx - 9, 12, w + 18, 28, 14, C_ACCENT);
             text(f17, TAB_NAMES[i], tx, 15, C_DARK);
         }
         else if (i == (int)tab) {
-            fill_round(tx - 10, 12, w + 20, 28, 14, C_PANEL);
+            fill_round(tx - 9, 12, w + 18, 28, 14, C_PANEL);
             text(f17, TAB_NAMES[i], tx, 15, C_ACCENT);
         }
         else {
             text(f17, TAB_NAMES[i], tx, 15, C_GREY);
         }
-        tx += w + 26;
+        tx += w + 22;
     }
+}
+
+static void pill(const char *label, int right_x, int y, SDL_Color bg, SDL_Color fg)
+{
+    int bw = text_w(f13, label) + 14;
+    fill_round(right_x - bw, y, bw, 20, 10, bg);
+    text(f13, label, right_x - bw + 7, y + 1, fg);
 }
 
 static void draw_badge(Item *it, int x, int y, int w)
 {
     if (!*it->installed)
         return;
-    bool update = strcmp(it->installed, it->version) != 0;
-    const char *label = update ? "NY" : "OK";
-    int bw = text_w(f13, label) + 12;
-    fill_round(x + w - bw - 5, y + 5, bw, 18, 9, update ? C_ACCENT : C_GREEN);
-    text(f13, label, x + w - bw + 1, y + 6, update ? C_DARK : C_WHITE);
+    bool update = has_update(it);
+    bool in_use = active_variant(it) >= 0;
+    pill(update ? "NY" : (in_use ? "I BRUK" : "OK"), x + w - 5, y + 5, update ? C_ACCENT : C_GREEN,
+         update ? C_DARK : C_WHITE);
 }
 
-static void draw_card(int idx, int x, int y, int w, int h, bool selected, bool shelf)
+static void draw_card(int idx, int x, int y, bool selected)
 {
     Item *it = &items[idx];
-    request_image(idx);
+    int w, h;
+    img_size(it, IMG_CARD, &w, &h);
     if (selected)
         outline_round(x - 5, y - 5, w + 10, h + 10, 12, 3, C_ACCENT, C_BG);
-    draw_cover(it, shelf ? it->img_shelf : it->img_card, x, y, w, h);
+    draw_cover(idx, IMG_CARD, x, y);
     draw_badge(it, x, y, w);
     char name[160];
-    copy_str(name, sizeof(name), it->name);
-    char *paren = strstr(name, " (");
-    if (paren)
-        *paren = '\0';
+    short_name(it->name, name, sizeof(name));
     text_fit(f13, name, x, y + h + 6, w, selected ? C_WHITE : C_GREY);
+}
+
+// Last tile of a shelf: opens the full list
+static void draw_see_all(int n, int x, int y, int w, int h, bool selected)
+{
+    if (selected)
+        outline_round(x - 5, y - 5, w + 10, h + 10, 12, 3, C_ACCENT, C_BG);
+    fill_round(x, y, w, h, 8, C_PANEL);
+    const char *l1 = "Se alle";
+    char l2[16];
+    snprintf(l2, sizeof(l2), "%d", n);
+    text(f17, l1, x + (w - text_w(f17, l1)) / 2, y + h / 2 - 22, selected ? C_ACCENT : C_WHITE);
+    text(f15, l2, x + (w - text_w(f15, l2)) / 2, y + h / 2 + 2, C_GREY);
+}
+
+static void draw_hero(int y0)
+{
+    Item *it = &items[hero];
+    fill(0, y0, SCREEN_W, 200, C_PANEL);
+    SDL_Surface *big = item_img(hero, IMG_DETAIL);
+    if (big) {
+        // soft banner: stretched, darkened cover
+        static SDL_Surface *band = NULL, *shade = NULL;
+        static int band_for = -1;
+        if (band_for != hero) {
+            if (band)
+                SDL_FreeSurface(band);
+            band = scale_rounded(big, SCREEN_W, 200, 0);
+            band_for = hero;
+        }
+        if (!shade) {
+            shade = SDL_CreateRGBSurface(SDL_SWSURFACE, SCREEN_W, 200, 32, 0, 0, 0, 0);
+            SDL_FillRect(shade, NULL, SDL_MapRGB(shade->format, 22, 18, 16));
+            SDL_SetAlpha(shade, SDL_SRCALPHA, 205);
+        }
+        if (band) {
+            SDL_Rect pos = {0, y0};
+            SDL_BlitSurface(band, NULL, screen, &pos);
+            pos.x = 0;
+            pos.y = y0;
+            SDL_BlitSurface(shade, NULL, screen, &pos);
+        }
+    }
+    draw_cover(hero, IMG_HERO, 24, y0 + 10);
+    text(f13, "UTVALGT", 172, y0 + 22, C_ACCENT);
+    char name[160];
+    short_name(it->name, name, sizeof(name));
+    text_fit(f34, name, 172, y0 + 38, SCREEN_W - 190, C_WHITE);
+    text_wrap(f15, it->description, 172, y0 + 84, SCREEN_W - 196, 20, 2, C_SOFT);
+    char meta[128], sz[32];
+    human_size(it->size, sz, sizeof(sz));
+    snprintf(meta, sizeof(meta), "%s  ·  %s", *it->genre ? it->genre : "Porter", sz);
+    text_fit(f15, meta, 172, y0 + 126, SCREEN_W - 196, C_GREY);
+    const char *btn = *it->installed ? "Installert" : "Installer";
+    int bw = text_w(f19, btn) + 40;
+    if (feat_rows[feat_row] == ROW_HERO)
+        outline_round(168, y0 + 150, bw + 8, 44, 22, 3, C_WHITE, C_BG);
+    fill_round(172, y0 + 154, bw, 36, 18, *it->installed ? C_GREEN : C_ACCENT);
+    text(f19, btn, 192, y0 + 160, *it->installed ? C_WHITE : C_DARK);
 }
 
 static void draw_featured(void)
 {
-    int y0 = TOP_H - feat_scroll;
-    // hero
-    if (hero >= 0) {
-        Item *it = &items[hero];
-        request_image(hero);
-        fill(0, y0, SCREEN_W, 200, C_PANEL);
-        if (it->img_detail) {
-            // soft banner: stretched, darkened cover
-            static SDL_Surface *band = NULL, *shade = NULL;
-            static int band_for = -1;
-            if (band_for != hero) {
-                if (band)
-                    SDL_FreeSurface(band);
-                band = scale_rounded(it->img_detail, SCREEN_W, 200, 0);
-                band_for = hero;
-            }
-            if (!shade) {
-                shade = SDL_CreateRGBSurface(SDL_SWSURFACE, SCREEN_W, 200, 32, 0, 0, 0, 0);
-                SDL_FillRect(shade, NULL, SDL_MapRGB(shade->format, 22, 18, 16));
-                SDL_SetAlpha(shade, SDL_SRCALPHA, 205);
-            }
-            if (band) {
-                SDL_Rect pos = {0, y0};
-                SDL_BlitSurface(band, NULL, screen, &pos);
-                pos.x = 0;
-                pos.y = y0;
-                SDL_BlitSurface(shade, NULL, screen, &pos);
-            }
-        }
-        draw_cover(it, it->img_hero, 24, y0 + 10, HERO_W, HERO_H);
-        text(f13, "UTVALGT", 172, y0 + 22, C_ACCENT);
-        char name[160];
-        copy_str(name, sizeof(name), it->name);
-        char *paren = strstr(name, " (");
-        if (paren)
-            *paren = '\0';
-        text_fit(f34, name, 172, y0 + 38, SCREEN_W - 190, C_WHITE);
-        text_wrap(f15, it->description, 172, y0 + 84, SCREEN_W - 196, 20, 2, C_SOFT);
-        char meta[128], sz[32];
-        human_size(it->size, sz, sizeof(sz));
-        snprintf(meta, sizeof(meta), "%s  ·  %s", *it->genre ? it->genre : "Porter", sz);
-        text_fit(f15, meta, 172, y0 + 126, SCREEN_W - 196, C_GREY);
-        const char *btn = *it->installed ? "Installert" : "Installer";
-        int bw = text_w(f19, btn) + 40;
-        if (feat_row == 0)
-            outline_round(168, y0 + 150, bw + 8, 44, 22, 3, C_WHITE, C_BG);
-        fill_round(172, y0 + 154, bw, 36, 18, *it->installed ? C_GREEN : C_ACCENT);
-        text(f19, btn, 192, y0 + 160, *it->installed ? C_WHITE : C_DARK);
-    }
+    // Scroll so the selected row fits between the top bar and the hints
+    int y_sel = 0;
+    for (int r = 0; r < feat_row; r++)
+        y_sel += row_height(feat_rows[r]);
+    int scroll = 0;
+    int view_h = BOTTOM_Y - TOP_H;
+    if (y_sel + row_height(feat_rows[feat_row]) > view_h)
+        scroll = y_sel + row_height(feat_rows[feat_row]) - view_h + 6;
+    if (feat_row == 0)
+        scroll = 0;
 
-    // shelves
-    static const char *titles[] = {"", "Gratis porter", "Apper og motorer"};
-    int y = y0 + 210;
-    for (int row = 1; row <= 2; row++) {
+    static const char *titles[] = {"", "Gratis porter", "Populære temaer", "Apper og motorer"};
+    int y = TOP_H - scroll;
+    for (int r = 0; r < feat_row_count; r++) {
+        RowKind row = feat_rows[r];
+        int h = row_height(row);
+        if (y + h < TOP_H || y > BOTTOM_Y) {
+            y += h;
+            continue;
+        }
+        if (row == ROW_HERO) {
+            draw_hero(y);
+            y += h;
+            continue;
+        }
         int list[MAX_ITEMS];
         int n = shelf_list(row, list);
+        int shown = shelf_shown(row, n);
+        y += row == feat_rows[0] ? 10 : 0;
         text(f19, titles[row], 24, y, C_WHITE);
         char count[16];
         snprintf(count, sizeof(count), "%d", n);
         text(f15, count, SCREEN_W - 24 - text_w(f15, count), y + 4, C_GREY);
-        int first = 0;
-        if (feat_row == row && feat_col > 4)
-            first = feat_col - 4;
-        for (int k = 0; k < 6 && first + k < n; k++) {
-            int i = first + k;
-            int x = 24 + k * (SHELF_W + 14);
-            draw_card(list[i], x, y + 32, SHELF_W, SHELF_H, feat_row == row && feat_col == i, true);
-        }
-        y += 190;
+        int cw, ch;
+        img_size(&items[list[0]], IMG_CARD, &cw, &ch);
+        int gap = row == ROW_THEMES ? 18 : 14;
+        for (int k = 0; k < shown; k++)
+            draw_card(list[k], 24 + k * (cw + gap), y + 32, feat_row == r && feat_col == k);
+        if (shelf_has_more(row, n))
+            draw_see_all(n, 24 + shown * (cw + gap), y + 32, cw, ch, feat_row == r && feat_col == shown);
+        y += h - (row == feat_rows[0] ? 10 : 0);
     }
 }
 
-static void draw_grid(void)
+static void draw_scrollbar(int first, int visible, int total, int y, int h)
 {
-    int list[MAX_ITEMS];
-    int n = tab_list(tab, list);
-    const char *title = tab == TAB_APPS ? "Apper" : tab == TAB_PORTS ? "Porter"
-                                                                     : "Installert";
+    if (total <= visible)
+        return;
+    int bar_h = h * visible / total;
+    if (bar_h < 24)
+        bar_h = 24;
+    int max_first = total - visible;
+    int bar_y = y + (h - bar_h) * (first > max_first ? max_first : first) / max_first;
+    fill_round(SCREEN_W - 10, y, 4, h, 2, C_PANEL);
+    fill_round(SCREEN_W - 10, bar_y, 4, bar_h, 2, C_ACCENT);
+}
+
+static void draw_list_header(const char *title, int n, int pos)
+{
     text(f19, title, 24, TOP_H + 8, C_WHITE);
     char count[32];
     snprintf(count, sizeof(count), "%d", n);
     text(f15, count, 24 + text_w(f19, title) + 10, TOP_H + 12, C_GREY);
+    if (n > 0) {
+        char where[48];
+        Item *it = &items[pos];
+        char letter[2] = {(char)toupper((unsigned char)it->name[0]), 0};
+        snprintf(where, sizeof(where), "%s  ·  %d av %d", letter, sel[tab] + 1, n);
+        text(f15, where, SCREEN_W - 24 - text_w(f15, where), TOP_H + 12, C_GREY);
+    }
+}
+
+static void meta_line(Item *it, char *out, size_t n)
+{
+    char sz[32];
+    human_size(it->size, sz, sizeof(sz));
+    const char *what = it->kind == KIND_APP ? "App"
+                       : is_theme(it)       ? (it->variant_count > 1 ? "Temapakke" : "Tema")
+                       : it->needs_files    ? "Egne spillfiler"
+                                            : "Gratis";
+    char extra[64] = "";
+    if (*it->genre)
+        snprintf(extra, sizeof(extra), "  ·  %s", it->genre);
+    else if (is_theme(it) && *it->author)
+        snprintf(extra, sizeof(extra), "  ·  %s", it->author);
+    snprintf(out, n, "%s%s  ·  %s", what, extra, sz);
+}
+
+// One item per row: picture, name, details and status
+static void draw_list(int *list, int n)
+{
+    int first = top[tab];
+    for (int r = 0; r < LIST_ROWS && first + r < n; r++) {
+        int i = first + r;
+        Item *it = &items[list[i]];
+        int y = LIST_Y + r * LIST_ROW_H;
+        bool selected = i == sel[tab];
+        if (selected)
+            fill_round(14, y, SCREEN_W - 34, LIST_ROW_H - 4, 12, C_PANEL);
+        int w, h;
+        img_size(it, IMG_ROW, &w, &h);
+        int px = 24 + (TROW_W - w) / 2;
+        draw_cover(list[i], IMG_ROW, px, y + (LIST_ROW_H - 4 - h) / 2);
+        int tx = 24 + TROW_W + 14;
+        char name[160], meta[160];
+        short_name(it->name, name, sizeof(name));
+        meta_line(it, meta, sizeof(meta));
+        int right = SCREEN_W - 34;
+        if (*it->installed) {
+            bool update = has_update(it);
+            const char *label = update ? "Oppdatering" : (active_variant(it) >= 0 ? "I bruk" : "Installert");
+            pill(label, right - 10, y + 17, update ? C_ACCENT : C_GREEN, update ? C_DARK : C_WHITE);
+            right -= text_w(f13, label) + 34;
+        }
+        text_fit(f19, name, tx, y + 5, right - tx, selected ? C_WHITE : C_SOFT);
+        text_fit(f13, meta, tx, y + 31, right - tx, selected ? C_ACCENT : C_GREY);
+    }
+    draw_scrollbar(first, LIST_ROWS, n, LIST_Y, LIST_ROWS * LIST_ROW_H - 4);
+}
+
+// Themes: big previews, three per row, scrolling up and down
+static void draw_theme_grid(int *list, int n)
+{
+    int first_row = top[tab];
+    int gap = (SCREEN_W - 48 - TGRID_COLS * TTILE_W) / (TGRID_COLS - 1);
+    for (int r = 0; r < TGRID_ROWS; r++) {
+        for (int c = 0; c < TGRID_COLS; c++) {
+            int i = (first_row + r) * TGRID_COLS + c;
+            if (i >= n)
+                break;
+            Item *it = &items[list[i]];
+            int x = 24 + c * (TTILE_W + gap);
+            int y = LIST_Y + 6 + r * TGRID_ROW_H;
+            bool selected = i == sel[tab];
+            if (selected)
+                outline_round(x - 5, y - 5, TTILE_W + 10, TTILE_H + 10, 12, 3, C_ACCENT, C_BG);
+            draw_cover(list[i], IMG_TILE, x, y);
+            draw_badge(it, x, y, TTILE_W);
+            char name[160];
+            short_name(it->name, name, sizeof(name));
+            text_fit(f15, name, x, y + TTILE_H + 6, TTILE_W, selected ? C_WHITE : C_GREY);
+        }
+    }
+    int rows = (n + TGRID_COLS - 1) / TGRID_COLS;
+    draw_scrollbar(first_row, TGRID_ROWS, rows, LIST_Y, TGRID_ROWS * TGRID_ROW_H - 10);
+}
+
+static bool tab_is_grid(Tab t)
+{
+    return t == TAB_THEMES;
+}
+
+// Keep the selection on screen
+static void clamp_view(int n)
+{
+    if (sel[tab] >= n)
+        sel[tab] = n ? n - 1 : 0;
+    if (sel[tab] < 0)
+        sel[tab] = 0;
+    int per = tab_is_grid(tab) ? TGRID_COLS : 1;
+    int vis = tab_is_grid(tab) ? TGRID_ROWS : LIST_ROWS;
+    int row = sel[tab] / per;
+    if (row < top[tab])
+        top[tab] = row;
+    if (row >= top[tab] + vis)
+        top[tab] = row - vis + 1;
+}
+
+static void draw_tab_list(void)
+{
+    int list[MAX_ITEMS];
+    int n = tab_list(tab, list);
+    clamp_view(n);
+    draw_list_header(TAB_NAMES[tab], n, n ? list[sel[tab]] : 0);
     if (n == 0) {
         const char *empty = tab == TAB_INSTALLED ? "Ingenting installert fra App Store ennå." : "Ingenting her ennå.";
         text(f17, empty, (SCREEN_W - text_w(f17, empty)) / 2, 230, C_GREY);
         return;
     }
-    if (sel >= n)
-        sel = n - 1;
-    int row = sel / 5;
-    if (row < scroll_row)
-        scroll_row = row;
-    if (row > scroll_row + 1)
-        scroll_row = row - 1;
-    for (int r = 0; r < 2; r++) {
-        for (int c = 0; c < 5; c++) {
-            int i = (scroll_row + r) * 5 + c;
-            if (i >= n)
-                break;
-            int x = 24 + c * 120;
-            int y = TOP_H + 42 + r * 176;
-            draw_card(list[i], x, y, CARD_W, CARD_H, i == sel, false);
-        }
-    }
-    // scroll hint
-    int rows = (n + 4) / 5;
-    if (rows > 2) {
-        int bar_h = 330 * 2 / rows;
-        int bar_y = TOP_H + 44 + (330 - bar_h) * scroll_row / (rows - 2);
-        fill_round(SCREEN_W - 10, TOP_H + 44, 4, 330, 2, C_PANEL);
-        fill_round(SCREEN_W - 10, bar_y, 4, bar_h, 2, C_ACCENT);
-    }
+    if (tab_is_grid(tab))
+        draw_theme_grid(list, n);
+    else
+        draw_list(list, n);
 }
 
 static void draw_detail(void)
 {
     Item *it = &items[detail];
-    request_image(detail);
-    draw_cover(it, it->img_detail, 24, TOP_H + 18, DETAIL_W, DETAIL_H);
+    bool theme = is_theme(it);
+    int pw, ph;
+    img_size(it, IMG_DETAIL, &pw, &ph);
+    draw_cover(detail, IMG_DETAIL, 24, TOP_H + 18);
 
-    int x = 228, w = SCREEN_W - x - 24;
+    int x = 24 + pw + 24, w = SCREEN_W - x - 24;
     char name[160];
     copy_str(name, sizeof(name), it->name);
     char *paren = strstr(name, " (");
     char engine[64] = "";
-    if (paren) {
+    if (paren && !theme) {
         copy_str(engine, sizeof(engine), paren + 2);
         engine[strcspn(engine, ")")] = '\0';
         *paren = '\0';
     }
-    int y = text_wrap(f34, name, x, TOP_H + 14, w, 38, 2, C_WHITE);
+    int y = text_wrap(theme ? f24 : f34, name, x, TOP_H + 14, w, theme ? 28 : 38, 2, C_WHITE);
     char by[200];
     if (*engine)
         snprintf(by, sizeof(by), "%s  ·  %s", it->author, engine);
@@ -553,8 +882,10 @@ static void draw_detail(void)
     // chips
     char sz[32];
     human_size(it->size, sz, sizeof(sz));
-    const char *chips[3] = {it->is_port ? (it->needs_files ? "Egne spillfiler" : "Gratis") : "App",
-                            *it->genre ? it->genre : NULL, sz};
+    const char *kind = it->kind == KIND_APP ? "App" : theme         ? "Tema"
+                                                  : it->needs_files ? "Egne spillfiler"
+                                                                    : "Gratis";
+    const char *chips[3] = {kind, *it->genre ? it->genre : NULL, sz};
     int cx = x;
     for (int i = 0; i < 3; i++) {
         if (!chips[i])
@@ -568,8 +899,22 @@ static void draw_detail(void)
         text(f13, chip, cx + 11, y + 3, i == 0 && it->needs_files ? C_ACCENT : C_WHITE);
         cx += cw + 8;
     }
-    y += 40;
-    y = text_wrap(f15, it->description, x, y, w, 21, 5, C_SOFT);
+    y += 36;
+    y = text_wrap(f15, it->description, x, y, w, 21, theme ? 3 : 5, C_SOFT);
+
+    // theme pack: pick the variant to use
+    int in_use = active_variant(it);
+    if (theme && it->variant_count > 1) {
+        char v[160], line[200];
+        short_name(it->variants[variant], v, sizeof(v));
+        snprintf(line, sizeof(line), "‹  %s  ›", v);
+        text(f13, "VARIANT", x, TOP_H + 168, C_ACCENT);
+        char pos[32];
+        snprintf(pos, sizeof(pos), "%d av %d", variant + 1, it->variant_count);
+        text(f13, pos, x + w - text_w(f13, pos), TOP_H + 168, C_GREY);
+        fill_round(x, TOP_H + 186, w, 28, 14, C_CARD);
+        text_fit(f15, line, x + 12, TOP_H + 189, w - 24, C_WHITE);
+    }
 
     // action area
     int by_ = TOP_H + 222;
@@ -578,9 +923,9 @@ static void draw_detail(void)
     if (job_pid > 0 && job_item == detail) {
         parse_status(state, &pct, txt, sizeof(txt));
         fill_round(x, by_, w, 36, 18, C_PANEL);
-        int pw = w * pct / 100;
-        if (!strcmp(state, "download") && pw > 36)
-            fill_round(x, by_, pw, 36, 18, C_ACCENT);
+        int bar = w * pct / 100;
+        if (!strcmp(state, "download") && bar > 36)
+            fill_round(x, by_, bar, 36, 18, C_ACCENT);
         char line[160];
         if (!strcmp(state, "download"))
             snprintf(line, sizeof(line), "Laster ned … %d %%", pct);
@@ -588,30 +933,52 @@ static void draw_detail(void)
             snprintf(line, sizeof(line), "Sjekker filen …");
         else if (!strcmp(job_kind, "remove"))
             snprintf(line, sizeof(line), "Fjerner …");
+        else if (!strcmp(job_kind, "apply"))
+            snprintf(line, sizeof(line), "Bytter tema …");
         else
             snprintf(line, sizeof(line), "Installerer …");
-        text(f17, line, x + 14, by_ + 7, !strcmp(state, "download") && pw > 120 ? C_DARK : C_WHITE);
-    }
-    else if (*it->installed) {
-        bool update = strcmp(it->installed, it->version) != 0;
-        const char *label = update ? "Oppdater" : "Installert";
-        fill_round(x, by_, text_w(f19, label) + 40, 36, 18, update ? C_ACCENT : C_GREEN);
-        text(f19, label, x + 20, by_ + 6, update ? C_DARK : C_WHITE);
+        text(f17, line, x + 14, by_ + 7, !strcmp(state, "download") && bar > 120 ? C_DARK : C_WHITE);
     }
     else {
-        fill_round(x, by_, text_w(f19, "Installer") + 40, 36, 18, C_ACCENT);
-        text(f19, "Installer", x + 20, by_ + 6, C_DARK);
+        const char *label;
+        SDL_Color bg = C_ACCENT, fg = C_DARK;
+        if (!*it->installed)
+            label = "Installer";
+        else if (has_update(it))
+            label = "Oppdater";
+        else if (theme && in_use == variant) {
+            label = "I bruk";
+            bg = C_GREEN;
+            fg = C_WHITE;
+        }
+        else if (theme)
+            label = "Bruk temaet";
+        else {
+            label = "Installert";
+            bg = C_GREEN;
+            fg = C_WHITE;
+        }
+        fill_round(x, by_, text_w(f19, label) + 40, 36, 18, bg);
+        text(f19, label, x + 20, by_ + 6, fg);
     }
 
-    char foot[200];
-    snprintf(foot, sizeof(foot), "Versjon %s%s%s", it->version, *it->installed ? "  ·  installert " : "",
-             *it->installed ? it->installed : "");
-    text_fit(f13, foot, 24, TOP_H + 290, SCREEN_W - 48, C_GREY);
-    if (it->is_port)
-        text_fit(f13,
-                 it->needs_files ? "Legg inn originale spillfiler, se _required_files.txt i Roms/PORTS/Games."
-                                 : "Krever «Ports Collection» i Package Manager. Kjør «~Import ports» etterpå.",
-                 24, TOP_H + 312, SCREEN_W - 48, C_GREY);
+    int foot_y = TOP_H + 18 + ph + 18;
+    if (foot_y < TOP_H + 290)
+        foot_y = TOP_H + 290;
+    if (!theme) {
+        char foot[200];
+        snprintf(foot, sizeof(foot), "Versjon %s%s%s", it->version, *it->installed ? "  ·  installert " : "",
+                 *it->installed ? it->installed : "");
+        text_fit(f13, foot, 24, foot_y, SCREEN_W - 48, C_GREY);
+    }
+    const char *note = NULL;
+    if (it->kind == KIND_PORT)
+        note = it->needs_files ? "Legg inn originale spillfiler, se _required_files.txt i Roms/PORTS/Games."
+                               : "Krever «Ports Collection» i Package Manager. Kjør «~Import ports» etterpå.";
+    else if (theme)
+        note = "Fra OnionUI/Themes. Temaet kan også velges senere under Themes i Innstillinger.";
+    if (note)
+        text_fit(f13, note, 24, foot_y + (theme ? 0 : 22), SCREEN_W - 48, C_GREY);
 }
 
 static void draw_message(void)
@@ -628,38 +995,52 @@ static void draw_message(void)
 
 static void draw(void)
 {
+    frame++;
     SDL_FillRect(screen, NULL, map(screen, C_BG));
     if (detail >= 0)
         draw_detail();
     else if (tab == TAB_FEATURED)
         draw_featured();
     else
-        draw_grid();
+        draw_tab_list();
     draw_topbar();
 
     if (detail >= 0) {
         Item *it = &items[detail];
+        bool pack = is_theme(it) && it->variant_count > 1;
+        const char *k[4], *l[4];
+        int n = 0;
         if (job_pid > 0) {
-            const char *k[] = {"B"};
-            const char *l[] = {"Tilbake"};
-            draw_hints(k, l, 1);
-        }
-        else if (*it->installed) {
-            bool update = strcmp(it->installed, it->version) != 0;
-            const char *k[] = {"A", "Y", "B"};
-            const char *l[] = {update ? "Oppdater" : "Installer på nytt", "Fjern", "Tilbake"};
-            draw_hints(k, l, 3);
+            k[n] = "B", l[n++] = "Tilbake";
         }
         else {
-            const char *k[] = {"A", "B"};
-            const char *l[] = {"Installer", "Tilbake"};
-            draw_hints(k, l, 2);
+            if (!*it->installed)
+                k[n] = "A", l[n++] = "Installer";
+            else if (has_update(it))
+                k[n] = "A", l[n++] = "Oppdater";
+            else if (is_theme(it)) {
+                if (active_variant(it) != variant)
+                    k[n] = "A", l[n++] = "Bruk";
+            }
+            else
+                k[n] = "A", l[n++] = "Installer på nytt";
+            if (*it->installed)
+                k[n] = "Y", l[n++] = "Fjern";
+            if (pack)
+                k[n] = "←→", l[n++] = "Variant";
+            k[n] = "B", l[n++] = "Tilbake";
         }
+        draw_hints(k, l, n);
+    }
+    else if (tab == TAB_FEATURED) {
+        const char *k[] = {"A", "L/R", "B"};
+        const char *l[] = {"Åpne", "Fane", "Avslutt"};
+        draw_hints(k, l, 3);
     }
     else {
-        const char *k[] = {"A", "B", "L/R"};
-        const char *l[] = {"Åpne", "Avslutt", "Bytt fane"};
-        draw_hints(k, l, 3);
+        const char *k[] = {"A", "←→", "L2/R2", "L/R", "B"};
+        const char *l[] = {"Åpne", tab_is_grid(tab) ? "Flytt" : "Side", "Bokstav", "Fane", "Avslutt"};
+        draw_hints(k, l, 5);
     }
     draw_message();
     SDL_BlitSurface(screen, NULL, video, NULL);
@@ -682,73 +1063,133 @@ static void draw_center(const char *line1, const char *line2, SDL_Color c1)
 static void open_detail(int idx)
 {
     detail = idx;
+    Item *it = &items[idx];
+    int v = active_variant(it);
+    variant = v >= 0 ? v : 0;
+}
+
+// Jump to the next (dir 1) or previous (dir -1) first letter
+static void jump_letter(int *list, int n, int dir)
+{
+    int s = sel[tab];
+    char cur = toupper((unsigned char)items[list[s]].name[0]);
+    if (dir > 0) {
+        while (s < n - 1 && toupper((unsigned char)items[list[s]].name[0]) == cur)
+            s++;
+    }
+    else {
+        // to the start of this letter, or of the previous one if already there
+        if (s > 0 && toupper((unsigned char)items[list[s - 1]].name[0]) != cur)
+            cur = toupper((unsigned char)items[list[--s]].name[0]);
+        while (s > 0 && toupper((unsigned char)items[list[s - 1]].name[0]) == cur)
+            s--;
+    }
+    sel[tab] = s;
+}
+
+static void on_key_detail(SDLKey key)
+{
+    Item *it = &items[detail];
+    if (key == SW_BTN_B) {
+        detail = -1;
+        return;
+    }
+    if (job_pid > 0)
+        return;
+    if (is_theme(it) && it->variant_count > 1 && (key == SW_BTN_LEFT || key == SW_BTN_RIGHT)) {
+        variant = (variant + (key == SW_BTN_RIGHT ? 1 : it->variant_count - 1)) % it->variant_count;
+    }
+    else if (key == SW_BTN_A) {
+        if (is_theme(it) && *it->installed && !has_update(it)) {
+            if (active_variant(it) != variant)
+                start_job("apply", detail, it->variants[variant]);
+        }
+        else
+            start_job("install", detail, NULL);
+    }
+    else if (key == SW_BTN_Y && *it->installed) {
+        if (active_variant(it) >= 0)
+            show_message("Temaet er i bruk. Bytt til et annet tema først.", 3500);
+        else
+            start_job("remove", detail, NULL);
+    }
+}
+
+static void on_key_featured(SDLKey key)
+{
+    RowKind row = feat_rows[feat_row];
+    int list[MAX_ITEMS];
+    int n = row == ROW_HERO ? 0 : shelf_list(row, list);
+    int slots = row == ROW_HERO ? 1 : shelf_shown(row, n) + (shelf_has_more(row, n) ? 1 : 0);
+    if (key == SW_BTN_DOWN && feat_row < feat_row_count - 1) {
+        feat_row++;
+        feat_col = 0;
+    }
+    else if (key == SW_BTN_UP && feat_row > 0) {
+        feat_row--;
+        feat_col = 0;
+    }
+    else if (key == SW_BTN_RIGHT && feat_col < slots - 1)
+        feat_col++;
+    else if (key == SW_BTN_LEFT && feat_col > 0)
+        feat_col--;
+    else if (key == SW_BTN_A) {
+        if (row == ROW_HERO)
+            open_detail(hero);
+        else if (feat_col < shelf_shown(row, n))
+            open_detail(list[feat_col]);
+        else { // "Se alle"
+            tab = shelf_tab(row);
+            sel[tab] = top[tab] = 0;
+        }
+    }
+}
+
+static void on_key_list(SDLKey key)
+{
+    int list[MAX_ITEMS];
+    int n = tab_list(tab, list);
+    if (!n)
+        return;
+    int *s = &sel[tab];
+    bool grid = tab_is_grid(tab);
+    int step = grid ? TGRID_COLS : 1;
+    int page = grid ? TGRID_COLS * TGRID_ROWS : LIST_ROWS;
+    if (key == SW_BTN_DOWN)
+        *s = *s + step < n ? *s + step : (grid && *s / step < (n - 1) / step ? n - 1 : *s);
+    else if (key == SW_BTN_UP && *s >= step)
+        *s -= step;
+    else if (key == SW_BTN_RIGHT)
+        *s = grid ? (*s < n - 1 ? *s + 1 : *s) : (*s + page < n ? *s + page : n - 1);
+    else if (key == SW_BTN_LEFT)
+        *s = grid ? (*s > 0 ? *s - 1 : 0) : (*s > page ? *s - page : 0);
+    else if (key == SW_BTN_R2)
+        jump_letter(list, n, 1);
+    else if (key == SW_BTN_L2)
+        jump_letter(list, n, -1);
+    else if (key == SW_BTN_A)
+        open_detail(list[*s]);
+    clamp_view(n);
 }
 
 static void on_key(SDLKey key)
 {
     if (detail >= 0) {
-        Item *it = &items[detail];
-        if (key == SW_BTN_B) {
-            detail = -1;
-        }
-        else if (key == SW_BTN_A && job_pid <= 0) {
-            start_job("install", detail);
-        }
-        else if (key == SW_BTN_Y && job_pid <= 0 && *it->installed) {
-            start_job("remove", detail);
-        }
+        on_key_detail(key);
         return;
     }
-
     if (key == SW_BTN_B || key == SW_BTN_MENU) {
         quit = true;
         return;
     }
     if (key == SW_BTN_L1 || key == SW_BTN_R1) {
         tab = (tab + (key == SW_BTN_R1 ? 1 : TAB_COUNT - 1)) % TAB_COUNT;
-        sel = scroll_row = 0;
         return;
     }
-
-    if (tab == TAB_FEATURED) {
-        int list[MAX_ITEMS];
-        int n = feat_row > 0 ? shelf_list(feat_row, list) : 1;
-        if (key == SW_BTN_DOWN && feat_row < 2) {
-            feat_row++;
-            feat_col = 0;
-        }
-        else if (key == SW_BTN_UP && feat_row > 0) {
-            feat_row--;
-            feat_col = 0;
-        }
-        else if (key == SW_BTN_RIGHT && feat_col < n - 1)
-            feat_col++;
-        else if (key == SW_BTN_LEFT && feat_col > 0)
-            feat_col--;
-        else if (key == SW_BTN_A) {
-            if (feat_row == 0 && hero >= 0)
-                open_detail(hero);
-            else if (feat_row > 0 && n > 0)
-                open_detail(list[feat_col]);
-        }
-        feat_scroll = feat_row == 2 ? 190 : 0;
-        return;
-    }
-
-    int list[MAX_ITEMS];
-    int n = tab_list(tab, list);
-    if (!n)
-        return;
-    if (key == SW_BTN_RIGHT && sel < n - 1)
-        sel++;
-    else if (key == SW_BTN_LEFT && sel > 0)
-        sel--;
-    else if (key == SW_BTN_DOWN)
-        sel = sel + 5 < n ? sel + 5 : n - 1;
-    else if (key == SW_BTN_UP && sel >= 5)
-        sel -= 5;
-    else if (key == SW_BTN_A)
-        open_detail(list[sel]);
+    if (tab == TAB_FEATURED)
+        on_key_featured(key);
+    else
+        on_key_list(key);
 }
 
 /* ---------- scripted input for tests ---------- */
@@ -799,7 +1240,7 @@ static bool run_script_step(void)
     static const struct {
         const char *name;
         SDLKey key;
-    } keys[] = {{"U", SW_BTN_UP}, {"D", SW_BTN_DOWN}, {"L", SW_BTN_LEFT}, {"R", SW_BTN_RIGHT}, {"A", SW_BTN_A}, {"B", SW_BTN_B}, {"Y", SW_BTN_Y}, {"L1", SW_BTN_L1}, {"R1", SW_BTN_R1}};
+    } keys[] = {{"U", SW_BTN_UP}, {"D", SW_BTN_DOWN}, {"L", SW_BTN_LEFT}, {"R", SW_BTN_RIGHT}, {"A", SW_BTN_A}, {"B", SW_BTN_B}, {"X", SW_BTN_X}, {"Y", SW_BTN_Y}, {"L1", SW_BTN_L1}, {"R1", SW_BTN_R1}, {"L2", SW_BTN_L2}, {"R2", SW_BTN_R2}};
     if (!strncmp(tok, "shot:", 5)) {
         draw();
         save_shot(tok + 5);
@@ -816,6 +1257,28 @@ static bool run_script_step(void)
 }
 
 /* ---------- main ---------- */
+
+static void job_finished(int code)
+{
+    if (job_item < 0)
+        return;
+    Item *it = &items[job_item];
+    refresh_installed(it);
+    read_active_theme();
+    char state[32], txt[200];
+    int pct;
+    parse_status(state, &pct, txt, sizeof(txt));
+    if (code != 0)
+        show_message(*txt ? txt : "Noe gikk galt", 4000);
+    else if (!strcmp(job_kind, "remove"))
+        show_message("Fjernet", 2500);
+    else if (!strcmp(job_kind, "apply"))
+        show_message("Temaet er byttet. Avslutt for å se det.", 4000);
+    else if (is_theme(it))
+        show_message("Installert! Trykk A for å bruke temaet.", 3500);
+    else
+        show_message("Installert!", 2500);
+}
 
 int main(void)
 {
@@ -836,6 +1299,7 @@ int main(void)
         script_pos = script_tokens;
     }
     mkdir(workdir, 0755);
+    read_active_theme();
 
     SDL_Init(SDL_INIT_VIDEO);
     SDL_ShowCursor(SDL_DISABLE);
@@ -850,7 +1314,7 @@ int main(void)
     }
 
     // Connect and download the catalog
-    start_job("fetch", -1);
+    start_job("fetch", -1, NULL);
     int code = 0;
     int dots = 0;
     while (!poll_job(&code)) {
@@ -883,6 +1347,7 @@ int main(void)
         }
         goto done;
     }
+    build_feat_rows();
 
     while (!quit) {
         SDL_Event e;
@@ -895,17 +1360,7 @@ int main(void)
         run_script_step();
 
         if (poll_job(&code)) {
-            if (job_item >= 0) {
-                Item *it = &items[job_item];
-                refresh_installed(it);
-                char state[32], txt[200];
-                int pct;
-                parse_status(state, &pct, txt, sizeof(txt));
-                if (code == 0)
-                    show_message(!strcmp(job_kind, "remove") ? "Fjernet" : "Installert!", 2500);
-                else
-                    show_message(*txt ? txt : "Noe gikk galt", 4000);
-            }
+            job_finished(code);
             job_item = -1;
         }
         poll_image_job();
