@@ -1,0 +1,7 @@
+{
+"label":"YouTube",
+"icon":"icon.png",
+"launch":"launch.sh",
+"description":"Populære videoer, søk og nedlasting",
+"group":"media"
+}
