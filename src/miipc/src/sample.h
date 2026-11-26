@@ -4,18 +4,18 @@
 
 /* Audio clip in memory: always 16-bit, mono or stereo. */
 typedef struct {
-    int16_t *data;      /* interleaved */
+    int16_t *data; /* interleaved */
     uint32_t frames;
-    int      channels;  /* 1 eller 2 */
-    int      rate;
-    char     name[32];  /* file name without extension */
-    char     path[512]; /* full path, used when saving */
+    int channels; /* 1 eller 2 */
+    int rate;
+    char name[32];  /* file name without extension */
+    char path[512]; /* full path, used when saving */
     /* Waveform cache (min/max per column over the whole clip). */
     int16_t *peaks;
-    int      peaks_w;
+    int peaks_w;
 } Sample;
 
-int  sample_load_wav(Sample *s, const char *path);
+int sample_load_wav(Sample *s, const char *path);
 void sample_free(Sample *s);
 
 /* Min/max pairs for 'w' columns over the whole clip (cached). */

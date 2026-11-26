@@ -10,16 +10,16 @@ extern int SCREEN_W, SCREEN_H;
 
 typedef uint32_t Color; /* 0xRRGGBB */
 
-int  gfx_init(void);
+int gfx_init(void);
 void gfx_quit(void);
 void gfx_clear(Color c);
 void gfx_rect(int x, int y, int w, int h, Color c);
 void gfx_frame(int x, int y, int w, int h, int t, Color c);
 void gfx_vline(int x, int y0, int y1, Color c);
 /* UTF-8 text (ASCII + a few Latin-1 letters). Returns width in pixels. */
-int  gfx_text(int x, int y, int scale, Color c, const char *fmt, ...);
-int  gfx_text_width(const char *s, int scale);
+int gfx_text(int x, int y, int scale, Color c, const char *fmt, ...);
+int gfx_text_width(const char *s, int scale);
 void gfx_present(void);
-int  gfx_save(const char *bmp_path);
+int gfx_save(const char *bmp_path);
 
 #endif

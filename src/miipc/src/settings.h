@@ -5,7 +5,7 @@
 
 void settings_open(void);
 void settings_draw(void);
-void settings_key(SDLKey k, int rep);   /* closes itself on SELECT / B */
+void settings_key(SDLKey k, int rep); /* closes itself on SELECT / B */
 const char *settings_help(void);
 
 #endif

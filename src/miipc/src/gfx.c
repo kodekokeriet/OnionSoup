@@ -10,38 +10,50 @@ static SDL_Surface *screen;
 static void detect_resolution(void)
 {
     const char *r = getenv("MIIPC_RES");
-    if (r && sscanf(r, "%dx%d", &SCREEN_W, &SCREEN_H) == 2) return;
+    if (r && sscanf(r, "%dx%d", &SCREEN_W, &SCREEN_H) == 2)
+        return;
 #ifdef MIYOO
     /* Mini v4 has a 752x560 panel; every other model is 640x480. */
     FILE *f = fopen("/sys/class/graphics/fb0/virtual_size", "r");
     int w = 0, h = 0;
-    if (f) { if (fscanf(f, "%d,%d", &w, &h) != 2) w = 0; fclose(f); }
-    if (w == 752) { SCREEN_W = 752; SCREEN_H = 560; }
+    if (f) {
+        if (fscanf(f, "%d,%d", &w, &h) != 2)
+            w = 0;
+        fclose(f);
+    }
+    if (w == 752) {
+        SCREEN_W = 752;
+        SCREEN_H = 560;
+    }
 #endif
 }
 
 #if SDL_MAJOR_VERSION >= 2
 /* PC build: draw into a software surface, show it scaled in a resizable window. */
-static SDL_Window   *win;
+static SDL_Window *win;
 static SDL_Renderer *ren;
-static SDL_Texture  *tex;
+static SDL_Texture *tex;
 
 int gfx_init(void)
 {
     detect_resolution();
     screen = SDL_CreateRGBSurfaceWithFormat(0, SCREEN_W, SCREEN_H, 32, SDL_PIXELFORMAT_ARGB8888);
-    if (!screen) return -1;
+    if (!screen)
+        return -1;
     int scale = 2;
     SDL_DisplayMode dm;
     if (SDL_GetDesktopDisplayMode(0, &dm) == 0) {
-        while (scale > 1 && (SCREEN_W * scale > dm.w * 9 / 10 || SCREEN_H * scale > dm.h * 9 / 10)) scale--;
+        while (scale > 1 && (SCREEN_W * scale > dm.w * 9 / 10 || SCREEN_H * scale > dm.h * 9 / 10))
+            scale--;
     }
     win = SDL_CreateWindow("MiiPC  (F1 = help)", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                            SCREEN_W * scale, SCREEN_H * scale, SDL_WINDOW_RESIZABLE);
-    if (!win) return -1;
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");   /* crisp pixels */
+    if (!win)
+        return -1;
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0"); /* crisp pixels */
     ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_PRESENTVSYNC);
-    if (!ren) ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
+    if (!ren)
+        ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_SOFTWARE);
     if (ren) {
         SDL_RenderSetLogicalSize(ren, SCREEN_W, SCREEN_H);
         tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_W, SCREEN_H);
@@ -51,7 +63,8 @@ int gfx_init(void)
 
 void gfx_present(void)
 {
-    if (!ren || !tex) return;
+    if (!ren || !tex)
+        return;
     SDL_UpdateTexture(tex, NULL, screen->pixels, screen->pitch);
     SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
     SDL_RenderClear(ren);
@@ -63,12 +76,15 @@ int gfx_init(void)
 {
     detect_resolution();
     screen = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 32, SDL_SWSURFACE);
-    if (!screen) screen = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 16, SDL_SWSURFACE);
+    if (!screen)
+        screen = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 16, SDL_SWSURFACE);
     if (!screen && (SCREEN_W != 640 || SCREEN_H != 480)) {
-        SCREEN_W = 640; SCREEN_H = 480;
+        SCREEN_W = 640;
+        SCREEN_H = 480;
         screen = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 32, SDL_SWSURFACE);
     }
-    if (!screen) return -1;
+    if (!screen)
+        return -1;
     SDL_ShowCursor(SDL_DISABLE);
     SDL_WM_SetCaption("MiiPC", NULL);
     return 0;
@@ -88,8 +104,9 @@ void gfx_clear(Color c) { SDL_FillRect(screen, NULL, map(c)); }
 
 void gfx_rect(int x, int y, int w, int h, Color c)
 {
-    if (w <= 0 || h <= 0) return;
-    SDL_Rect r = { (Sint16)x, (Sint16)y, (Uint16)w, (Uint16)h };
+    if (w <= 0 || h <= 0)
+        return;
+    SDL_Rect r = {(Sint16)x, (Sint16)y, (Uint16)w, (Uint16)h};
     SDL_FillRect(screen, &r, map(c));
 }
 
@@ -103,7 +120,11 @@ void gfx_frame(int x, int y, int w, int h, int t, Color c)
 
 void gfx_vline(int x, int y0, int y1, Color c)
 {
-    if (y1 < y0) { int t = y0; y0 = y1; y1 = t; }
+    if (y1 < y0) {
+        int t = y0;
+        y0 = y1;
+        y1 = t;
+    }
     gfx_rect(x, y0, 1, y1 - y0 + 1, c);
 }
 
@@ -111,19 +132,29 @@ void gfx_vline(int x, int y0, int y1, Color c)
 static int next_glyph(const unsigned char **s)
 {
     unsigned c = *(*s)++;
-    if (c >= 32 && c < 127) return c - 32;
+    if (c >= 32 && c < 127)
+        return c - 32;
     if (c == 0xC3 && **s) {
         unsigned d = *(*s)++;
         switch (d) {
-        case 0xA6: return 95; /* æ */
-        case 0xB8: return 96; /* ø */
-        case 0xA5: return 97; /* å */
-        case 0x86: return 98; /* Æ */
-        case 0x98: return 99; /* Ø */
-        case 0x85: return 100; /* Å */
+        case 0xA6:
+            return 95; /* æ */
+        case 0xB8:
+            return 96; /* ø */
+        case 0xA5:
+            return 97; /* å */
+        case 0x86:
+            return 98; /* Æ */
+        case 0x98:
+            return 99; /* Ø */
+        case 0x85:
+            return 100; /* Å */
         }
     }
-    else if (c >= 0xC0) { while ((**s & 0xC0) == 0x80) (*s)++; }
+    else if (c >= 0xC0) {
+        while ((**s & 0xC0) == 0x80)
+            (*s)++;
+    }
     return '?' - 32;
 }
 
@@ -131,7 +162,10 @@ int gfx_text_width(const char *s, int scale)
 {
     int n = 0;
     const unsigned char *p = (const unsigned char *)s;
-    while (*p) { next_glyph(&p); n++; }
+    while (*p) {
+        next_glyph(&p);
+        n++;
+    }
     return n * FONT_W * scale;
 }
 
@@ -151,13 +185,18 @@ int gfx_text(int x, int y, int scale, Color c, const char *fmt, ...)
         const unsigned char *g = font8x12[next_glyph(&s)];
         for (int gy = 0; gy < FONT_H; gy++)
             for (int gx = 0; gx < FONT_W; gx++) {
-                if (!(g[gy] & (0x80 >> gx))) continue;
+                if (!(g[gy] & (0x80 >> gx)))
+                    continue;
                 for (int sy = 0; sy < scale; sy++)
                     for (int sx = 0; sx < scale; sx++) {
                         int X = x + gx * scale + sx, Y = y + gy * scale + sy;
-                        if (X < 0 || Y < 0 || X >= SCREEN_W || Y >= SCREEN_H) continue;
+                        if (X < 0 || Y < 0 || X >= SCREEN_W || Y >= SCREEN_H)
+                            continue;
                         Uint8 *p = (Uint8 *)screen->pixels + Y * screen->pitch + X * bpp;
-                        if (bpp == 4) *(Uint32 *)p = px; else *(Uint16 *)p = (Uint16)px;
+                        if (bpp == 4)
+                            *(Uint32 *)p = px;
+                        else
+                            *(Uint16 *)p = (Uint16)px;
                     }
             }
         x += FONT_W * scale;
@@ -166,4 +205,4 @@ int gfx_text(int x, int y, int scale, Color c, const char *fmt, ...)
     return x - x0;
 }
 
-int  gfx_save(const char *p) { return SDL_SaveBMP(screen, p); }
+int gfx_save(const char *p) { return SDL_SaveBMP(screen, p); }

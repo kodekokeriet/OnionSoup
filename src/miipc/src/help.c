@@ -3,15 +3,22 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef struct { const char *tok, *miyoo, *pc; } KeyName;
+typedef struct {
+    const char *tok, *miyoo, *pc;
+} KeyName;
 static const KeyName names[] = {
-    { "L1", "L1", "Q" },        { "R1", "R1", "W" },
-    { "L2", "L2", "Space" },    { "R2", "R2", "Shift" },
-    { "SH", "R2", "Shift" },
-    { "SEL", "SELECT", "Tab" }, { "START", "START", "Enter" },
-    { "MENU", "MENU", "Esc" },  { "DPAD", "D-pad", "Arrows" },
-    { "UD", "Up/Down", "Up/Down" }, { "LR", "Left/Right", "Left/Right" },
-    { "HELP", "MENU > Help", "F1" },
+    {"L1", "L1", "Q"},
+    {"R1", "R1", "W"},
+    {"L2", "L2", "Space"},
+    {"R2", "R2", "Shift"},
+    {"SH", "R2", "Shift"},
+    {"SEL", "SELECT", "Tab"},
+    {"START", "START", "Enter"},
+    {"MENU", "MENU", "Esc"},
+    {"DPAD", "D-pad", "Arrows"},
+    {"UD", "Up/Down", "Up/Down"},
+    {"LR", "Left/Right", "Left/Right"},
+    {"HELP", "MENU > Help", "F1"},
 };
 
 void keys_expand(const char *in, char *out, int n)
@@ -29,7 +36,8 @@ void keys_expand(const char *in, char *out, int n)
 #else
                         const char *r = names[i].pc;
 #endif
-                        while (*r && o < n - 1) out[o++] = *r++;
+                        while (*r && o < n - 1)
+                            out[o++] = *r++;
                         break;
                     }
                 }
@@ -104,7 +112,10 @@ static void line(int x, int y, int keyw, const char *src)
     char buf[160], keys[64];
     keys_expand(src, buf, sizeof buf);
     char *bar = strchr(buf, '|');
-    if (!bar) { gfx_text(x, y, 1, C_TEXT, "%s", buf); return; }
+    if (!bar) {
+        gfx_text(x, y, 1, C_TEXT, "%s", buf);
+        return;
+    }
     *bar = 0;
     snprintf(keys, sizeof keys, "%s", buf);
     gfx_text(x, y, 1, C_ACCENT, "%s", keys);
@@ -116,7 +127,7 @@ void help_draw(int view)
     int m = SCREEN_W / 24, x = m, y = m, w = SCREEN_W - 2 * m, h = SCREEN_H - 2 * m;
     gfx_rect(x, y, w, h, C_PANEL);
     gfx_frame(x, y, w, h, 2, C_ACCENT);
-    static const char *vname[NUM_VIEWS] = { "PLAY", "SEQ", "MIX", "SAMPLE", "SONG" };
+    static const char *vname[NUM_VIEWS] = {"PLAY", "SEQ", "MIX", "SAMPLE", "SONG"};
     int tx = x + 14, ty = y + 10;
     gfx_text(tx, ty, 2, C_ACCENT, "HELP");
     gfx_text(tx + 80, ty + 8, 1, C_DIM, "any key closes");
@@ -126,9 +137,15 @@ void help_draw(int view)
     gfx_text(tx, ty, 1, C_DIM, "KEYBOARD = MIYOO BUTTON");
     ty += 18;
     static const char *keymap[][2] = {
-        { "Arrows", "D-pad" }, { "A B X Y", "A B X Y" }, { "Q / W", "L1 / R1" },
-        { "Space / 1", "L2" }, { "Shift / 2", "R2 (SHIFT)" }, { "Tab", "SELECT" },
-        { "Enter", "START" }, { "Esc", "MENU" }, { "F1", "this help" },
+        {"Arrows", "D-pad"},
+        {"A B X Y", "A B X Y"},
+        {"Q / W", "L1 / R1"},
+        {"Space / 1", "L2"},
+        {"Shift / 2", "R2 (SHIFT)"},
+        {"Tab", "SELECT"},
+        {"Enter", "START"},
+        {"Esc", "MENU"},
+        {"F1", "this help"},
     };
     int colw = (w - 28) / 2;
     for (int i = 0; i < 9; i++) {
@@ -149,12 +166,18 @@ void help_draw(int view)
         "{SEL}|settings: tempo, tap, swing, quantize, ...",
         "{START} / {MENU}|project: save, open, resample, export",
     };
-    for (int i = 0; i < 6; i++, ty += 16) { keys_expand(every[i], b, sizeof b); line(tx, ty, 160, b); }
+    for (int i = 0; i < 6; i++, ty += 16) {
+        keys_expand(every[i], b, sizeof b);
+        line(tx, ty, 160, b);
+    }
     ty += 8;
 
-    const char **lines = view == VIEW_PLAY ? play_lines : view == VIEW_SEQ ? seq_lines
-                       : view == VIEW_MIX ? mix_lines : view == VIEW_SAMPLE ? sample_lines : song_lines;
+    const char **lines = view == VIEW_PLAY ? play_lines : view == VIEW_SEQ  ? seq_lines
+                                                      : view == VIEW_MIX    ? mix_lines
+                                                      : view == VIEW_SAMPLE ? sample_lines
+                                                                            : song_lines;
     gfx_text(tx, ty, 1, C_DIM, "THIS VIEW: %s", vname[view]);
     ty += 18;
-    for (int i = 0; lines[i] && ty < y + h - 16; i++, ty += 16) line(tx, ty, 160, lines[i]);
+    for (int i = 0; lines[i] && ty < y + h - 16; i++, ty += 16)
+        line(tx, ty, 160, lines[i]);
 }
