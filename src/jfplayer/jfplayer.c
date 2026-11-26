@@ -20,7 +20,8 @@
 // Y audio track, Up/Down or START show controls, B/MENU stop.
 //
 // Test environment: SDCARD, JF_FONT, JF_CURL, JFP_SCRIPT (scripted input),
-// JFP_NO_AUDIO (no audio device).
+// JFP_NO_AUDIO (no audio device), JFP_DEBUG (log to stderr), JFP_FLIP (turn
+// the picture 180 degrees in software).
 
 #include <SDL/SDL.h>
 #include <SDL/SDL_ttf.h>
@@ -104,6 +105,7 @@ static int menu_sel = 0;
 static double last_pos = 0;
 static Uint32 last_report = 0;
 static bool need_draw = true;
+static bool flip_180 = false;
 static SDL_Surface *cur_frame = NULL;
 
 /* ---------- helpers ---------- */
@@ -684,6 +686,18 @@ static void draw(double pos)
         draw_osd(pos, buffering && cur_frame);
     if (menu)
         draw_menu();
+    if (flip_180) {
+        // fallback: turn the picture 180 degrees in software
+        SDL_LockSurface(screen);
+        Uint32 *px = (Uint32 *)screen->pixels;
+        int n = screen->pitch / 4 * screen->h;
+        for (int i = 0, j = n - 1; i < j; i++, j--) {
+            Uint32 t = px[i];
+            px[i] = px[j];
+            px[j] = t;
+        }
+        SDL_UnlockSurface(screen);
+    }
     SDL_BlitSurface(screen, NULL, video, NULL);
     SDL_Flip(video);
 }
@@ -870,7 +884,11 @@ int main(int argc, char **argv)
     SDL_EnableKeyRepeat(300, 120);
     TTF_Init();
     video = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 32, SDL_HWSURFACE);
-    screen = SDL_CreateRGBSurface(SDL_SWSURFACE, SCREEN_W, SCREEN_H, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0);
+    // Same kind of surface as the other OnionSoup apps: on the Miyoo, the SDL
+    // build turns the picture the right way up only when blitting from a
+    // hardware surface to the screen.
+    screen = SDL_CreateRGBSurface(SDL_HWSURFACE, SCREEN_W, SCREEN_H, 32, 0, 0, 0, 0);
+    flip_180 = getenv("JFP_FLIP") != NULL;
     if (!soup_open_fonts(font_path)) {
         fprintf(stderr, "jfplayer: cannot open font %s\n", font_path);
         return 1;
