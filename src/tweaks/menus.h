@@ -937,6 +937,9 @@ void *_get_menu_icon(const char *name)
     char path[STR_MAX * 2] = {0};
     const char *config_path = "/mnt/SDCARD/App/Tweaks/config.json";
 
+    if (!is_file(config_path)) // Tweaks placed in a group in the Apps tab
+        config_path = "/mnt/SDCARD/App/Tweaks/config.grouped.json";
+
     if (is_file(config_path)) {
         cJSON *config = json_load(config_path);
         char icon_path[STR_MAX];

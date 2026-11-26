@@ -42,6 +42,12 @@ bool checkAppInstalled(const char *basePath, int base_len, int level, bool compl
         if (exists(path)) {
             sprintf(pathInstalledApp, "/mnt/SDCARD%s", path + base_len);
 
+            // apps placed in a group in the Apps tab keep their config.json
+            // as config.grouped.json (see script/app_groups.sh)
+            if (!exists(pathInstalledApp) && strcmp(dp->d_name, "config.json") == 0)
+                sprintf(pathInstalledApp, "/mnt/SDCARD%.*sconfig.grouped.json",
+                        (int)(strlen(path + base_len) - strlen("config.json")), path + base_len);
+
             if (!exists(pathInstalledApp))
                 is_installed = false;
             else if (dp->d_type == DT_DIR)
@@ -342,6 +348,15 @@ void appUninstall(char *basePath, int strlenBase)
 
                 if (is_file(pathInstalledApp))
                     remove(pathInstalledApp);
+
+                // a grouped app keeps its config.json as config.grouped.json
+                if (strcmp(dp->d_name, "config.json") == 0) {
+                    sprintf(pathInstalledApp, "/mnt/SDCARD%.*sconfig.grouped.json",
+                            (int)(strlen(path + strlenBase) - strlen("config.json")),
+                            path + strlenBase);
+                    if (is_file(pathInstalledApp))
+                        remove(pathInstalledApp);
+                }
 
                 if (is_dir(path))
                     appUninstall(path, strlenBase);

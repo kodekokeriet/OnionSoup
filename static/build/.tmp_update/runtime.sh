@@ -211,6 +211,9 @@ launch_main_ui() {
     # Hide any new recents if applicable
     check_hide_recents
 
+    # Apps tab: hide grouped apps, show the groups and sort the tab
+    sh $sysdir/script/app_groups.sh sync --order
+
     # Ensure we've mounted the correct MainUI binary
     mount_main_ui
 
