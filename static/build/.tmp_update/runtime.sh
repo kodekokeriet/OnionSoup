@@ -200,9 +200,6 @@ check_main_ui() {
 launch_main_ui() {
     log "\n:: Launch MainUI"
 
-    # Games started from MainUI return to MainUI, not the game library
-    rm -f /tmp/soup_library_return
-
     cd $sysdir
 
     # Generate battery percentage image
@@ -631,11 +628,6 @@ check_switcher() {
     elif [ -f /tmp/quick_switch ]; then
         # Quick switch
         rm -f /tmp/quick_switch
-    elif [ -f /tmp/soup_library_return ]; then
-        # Game was started from the game library: go back there
-        rm -f /tmp/soup_library_return
-        echo "cd /mnt/SDCARD/App/GameLibrary; ./launch.sh" > $sysdir/cmd_to_run.sh
-        sync
     else
         # Return to MainUI
         rm $sysdir/cmd_to_run.sh 2> /dev/null

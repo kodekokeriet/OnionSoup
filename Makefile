@@ -125,7 +125,6 @@ core: $(CACHE)/.setup
 	@cd $(SRC_DIR)/tweaks && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/packageManager && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/appStore && BUILD_DIR=$(BIN_DIR) make
-	@cd $(SRC_DIR)/gameLibrary && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/sendkeys && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/setState && BUILD_DIR=$(BIN_DIR) make
 	@cd $(SRC_DIR)/renameRom && BUILD_DIR=$(BIN_DIR) make
