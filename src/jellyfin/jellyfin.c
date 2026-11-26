@@ -2628,13 +2628,19 @@ int main(void)
         discovery_start();
     }
 
+    // Redraw at once after input, otherwise ~8 times a second: a full redraw
+    // every frame keeps the CPU busy and slows down background downloads
+    Uint32 last_draw = 0;
     while (!quit) {
+        bool dirty = spos != NULL;
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT)
                 quit = true;
-            else if (ev.type == SDL_KEYDOWN && !spos)
+            else if (ev.type == SDL_KEYDOWN && !spos) {
                 on_key(ev.key.keysym.sym);
+                dirty = true;
+            }
         }
         script_step();
         discovery_poll();
@@ -2646,8 +2652,12 @@ int main(void)
         // a download finished: show the "Nedlastet" tab
         if (!offline && scr == S_HOME && view_count > 0 && strcmp(views[view_count - 1].collection, "downloads"))
             add_downloads_view();
-        draw();
-        SDL_Delay(30);
+        Uint32 now = SDL_GetTicks();
+        if (dirty || now - last_draw >= 120) {
+            draw();
+            last_draw = now;
+        }
+        SDL_Delay(20);
     }
 
     if (access("/tmp/jellyfin_play", F_OK) == 0)
