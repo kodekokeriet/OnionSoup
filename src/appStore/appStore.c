@@ -408,7 +408,8 @@ static bool load_catalog(void)
                 continue;
         }
         const char *type = json_str(a, "type");
-        bool game_item = !strcmp(type, "port") || !strcmp(type, "game");
+        bool hack = !strcmp(type, "romhack"); // patch for the user's own ROM
+        bool game_item = !strcmp(type, "port") || !strcmp(type, "game") || hack;
         if (game_item != games)
             continue;
         const char *sys = !strcmp(type, "port") ? "PORTS" : json_str(a, "system");
@@ -429,8 +430,10 @@ static bool load_catalog(void)
         copy_str(it->version, sizeof(it->version), json_str(a, "version"));
         copy_str(it->genre, sizeof(it->genre), json_str(a, "genre"));
         copy_str(it->image, sizeof(it->image), json_str(a, "image"));
-        it->kind = !strcmp(type, "port") ? KIND_PORT : (!strcmp(type, "game") ? KIND_GAME : (!strcmp(type, "theme") ? KIND_THEME : KIND_APP));
-        it->needs_files = cJSON_IsTrue(cJSON_GetObjectItem(a, "requires_game_files"));
+        it->kind = !strcmp(type, "port") ? KIND_PORT : (!strcmp(type, "game") || hack ? KIND_GAME : (!strcmp(type, "theme") ? KIND_THEME : KIND_APP));
+        it->needs_files = hack || cJSON_IsTrue(cJSON_GetObjectItem(a, "requires_game_files"));
+        if (hack && !*it->genre)
+            copy_str(it->genre, sizeof(it->genre), "Rom hack");
         cJSON *num = cJSON_GetObjectItem(a, "size");
         it->size = cJSON_IsNumber(num) ? (long)num->valuedouble : 0;
         num = cJSON_GetObjectItem(a, "featured");
@@ -1039,6 +1042,9 @@ static void draw_detail(void)
     if (it->kind == KIND_PORT)
         note = it->needs_files ? "Legg inn originale spillfiler, se _required_files.txt i Roms/PORTS/Games."
                                : "Krever «Ports Collection» i Package Manager. Kjør «~Import ports» etterpå.";
+    else if (it->kind == KIND_GAME)
+        note = it->needs_files ? "Rom hack: krever din egen original-ROM (ikke zippet) i Roms-mappen for systemet."
+                               : "Gratis homebrew. Lagres i Roms-mappen for systemet.";
     else if (theme)
         note = "Fra OnionUI/Themes. Temaet kan også velges senere under Themes i Innstillinger.";
     if (note)

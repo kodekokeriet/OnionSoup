@@ -90,3 +90,16 @@ the device has no emulator for, and Select filters by system. `file` is the name
 Add catalog URLs, one per line, to `.tmp_update/config/appstore_sources.txt` on the SD card. App Store and
 Game Store merge them into the OnionSoup catalog on every fetch (an id already in the catalog is not replaced,
 and a source that fails to load is skipped).
+
+## Rom hacks
+
+An entry with `"type": "romhack"` (via an extra source) is a patch for a ROM the user already owns:
+
+```json
+{"id": "game-sfc-<slug>", "type": "romhack", "name": "...", "system": "SFC", "url": "https://.../hack.bps",
+ "sha256": "<patch sha256>", "size": 123, "file": "<Hack name>.sfc", "base_sha1": "<sha1 of the unzipped original ROM>",
+ "base_name": "Original game (USA)"}
+```
+
+The Game Store finds the original by sha1 in `Roms/<system>/`, copies it to `file` and saves the patch next to it
+with the same name, so RetroArch applies it when the game starts. We never ship ROMs.

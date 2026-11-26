@@ -304,6 +304,10 @@ install_game() {
 	esac
 	[ -n "$system" ] && [ -n "$file" ] || die "Bad catalog entry: $id"
 	[ -d "$SDCARD/Emu/$system" ] || die "No emulator for $system on this device."
+	if [ "$(app_field "$id" type)" = romhack ]; then
+		install_romhack "$id" "$system" "$file"
+		return
+	fi
 	tmp="$workdir/$id.dl"
 	echo -e "\n${BLUE}Downloading $name...${NC}"
 	download_verified "$id" "$tmp"
@@ -325,6 +329,49 @@ install_game() {
 	echo -n "$version" > "$installed_dir/$id.version"
 	rm -f "$SDCARD/Roms/$system/${system}_cache6.db"
 	echo -e "${GREEN}$name installed.${NC}"
+	status "done 100 Installed"
+	pause
+}
+
+# Rom hack: find the user's own ROM (by base_sha1) in Roms/<system>/, copy it to <file>
+# and put the patch next to it with the same name. RetroArch applies .ips/.bps/.ups
+# patches with the ROM's name when the game starts (soft patching).
+install_romhack() {
+	id=$1 system=$2 file=$3
+	base_sha1=$(app_field "$id" base_sha1 | tr 'A-F' 'a-f')
+	[ -n "$base_sha1" ] || die "Bad catalog entry: $id"
+	url=$(app_field "$id" url)
+	ext=$(echo "${url##*.}" | tr 'A-Z' 'a-z')
+	case "$ext" in
+		ips | bps | ups) ;;
+		*) die "Unsupported patch type: $ext" ;;
+	esac
+	status "install 0 Looking for your ROM"
+	base=""
+	for f in "$SDCARD/Roms/$system"/*; do
+		[ -f "$f" ] || continue
+		case "$f" in
+			*.zip | *.7z | *.ips | *.bps | *.ups | *.db | *.txt | *.png) continue ;;
+		esac
+		if [ "$(sha1_of < "$f")" = "$base_sha1" ]; then
+			base=$f
+			break
+		fi
+	done
+	[ -n "$base" ] || die "Original ROM not found.\nPut an unzipped copy of\n$(app_field "$id" base_name)\nin Roms/$system/ first."
+	tmp="$workdir/$id.dl"
+	download_verified "$id" "$tmp"
+	status "install 100 Installing"
+	name=${file%.*}
+	cp -f "$base" "$SDCARD/Roms/$system/$file" && mv -f "$tmp" "$SDCARD/Roms/$system/$name.$ext" || {
+		rm -f "$tmp" "$SDCARD/Roms/$system/$file"
+		die "Could not install the rom hack."
+	}
+	mkdir -p "$installed_dir"
+	printf 'Roms/%s/%s\nRoms/%s/%s.%s\n' "$system" "$file" "$system" "$name" "$ext" > "$installed_dir/$id.files"
+	echo -n "$(app_field "$id" version)" > "$installed_dir/$id.version"
+	rm -f "$SDCARD/Roms/$system/${system}_cache6.db"
+	echo -e "${GREEN}$(app_field "$id" name) installed.${NC}"
 	status "done 100 Installed"
 	pause
 }
