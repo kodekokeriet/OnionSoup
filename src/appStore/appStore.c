@@ -226,7 +226,7 @@ static void img_size(const Item *it, ImgKind k, int *w, int *h)
 {
     static const int portrait[IMG_KINDS][2] = {{CARD_W, CARD_H}, {CARD_W, CARD_H}, {ROW_W, ROW_H}, {HERO_W, HERO_H}, {DETAIL_W, DETAIL_H}};
     static const int landscape[IMG_KINDS][2] = {{TCARD_W, TCARD_H}, {TTILE_W, TTILE_H}, {TROW_W, TROW_H}, {TCARD_W, TCARD_H}, {TDETAIL_W, TDETAIL_H}};
-    const int(*t)[2] = is_theme(it) ? landscape : portrait;
+    const int (*t)[2] = is_theme(it) ? landscape : portrait;
     *w = t[k][0];
     *h = t[k][1];
 }
