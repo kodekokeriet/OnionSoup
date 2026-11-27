@@ -1,31 +1,66 @@
 <p>&nbsp;</p>
 
-# OnionSoup
+# Onion Soup
 
-*OnionSoup is a fork of [Onion](https://github.com/OnionUI/Onion) for the Miyoo Mini and Mini+, with its own look, an app store and native Miyoo apps. Like Onion, it is licensed under GPL-3.0. Everything below is the original Onion README.*
-
-<p>&nbsp;</p>
-
-# <img alt="Onion" src="https://user-images.githubusercontent.com/44569252/179510333-40793fbc-f2a3-4269-8ab9-569b191d423f.png" width="196px">
-
-*An enhanced operating system for your Miyoo Mini and Mini+, featuring fine-tuned emulation with 100+ built-in emulators, auto-save and resume, a wealth of customization options, and much more. Performant, reliable, and straightforward retro gaming right in your pocket.*
+*A new fork of [Onion](https://github.com/OnionUI/Onion) for the Miyoo Mini and Mini+. Onion Soup picks up where Onion left off and adds a set of quality of life upgrades on top of it: an App Store and a Game Store, native media apps, a tidier Apps tab, a new default theme and a number of fixes.*
 
 <p>&nbsp;</p>
 
-<p align="center">
-<a href="https://onionui.github.io/docs"><img alt="Getting Started" src="https://user-images.githubusercontent.com/44569252/190487908-0fb16c8e-5ff5-4ee2-921a-0a9427f26587.png"></a>
-<a href="https://onionui.github.io/docs/features"><img alt="Features" src="https://user-images.githubusercontent.com/44569252/190487893-7a4a2287-462a-4d91-a4fc-ace80580653a.png"></a>
-<a href="https://onionui.github.io/docs/faq"><img alt="FAQ" src="https://user-images.githubusercontent.com/44569252/190487922-3d6b8df9-da26-47e8-b397-e4104156ede6.png"></a>
-</p>
+## What is Onion Soup?
 
-<p align="center">
-<a href="https://github.com/OnionUI/Themes/blob/main/README.md"><img alt="Getting Started" src="https://user-images.githubusercontent.com/44569252/226488035-e321e466-87c3-431f-bc81-52eb6a33c225.png"></a>
-<a href="https://onionui.github.io/docs/ports"><img alt="Features" src="https://user-images.githubusercontent.com/44569252/228782816-cd9c479f-4c46-46ba-abd5-42158d19de7b.png"></a>
-</p>
+Onion is an enhanced operating system for the Miyoo Mini and Mini+, with fine-tuned emulation, auto-save and resume and a wealth of customization options. Onion Soup is built on the last state of Onion (4.4.0 beta) and keeps all of that: the same emulators, RetroArch setup, Tweaks, Package Manager and save handling. What Onion Soup adds is aimed at making the device nicer to use day to day.
 
+**Supported devices:** Miyoo Mini (including v4) and Miyoo Mini+. Features that need WiFi (App Store and Game Store downloads, Jellyfin, YouTube) work on the Mini+ only.
 
-<p>&nbsp;</p>
+## Highlights
 
-<p align="center"><a href="https://onionui.github.io/docs/features"><img src="https://user-images.githubusercontent.com/44569252/226488511-297034e2-bb69-4f87-bd18-2ae6ff1e7300.gif"></a></p>
+- **App Store**: a graphical store for apps, ports and themes, downloaded over WiFi and checked against a checksum before they are installed. Apps can be updated from the store and keep the files you created in their folder. You can add your own catalog sources.
+- **Game Store**: ports from [Ports-Collection](https://github.com/OnionUI/Ports-Collection) and freely distributable homebrew games from the [retrobrews](https://github.com/retrobrews) collections. It only shows games for systems you have an emulator for, and you can filter by system.
+- **Native apps** (installed from the App Store, no emulator needed):
+  - **Jellyfin**: browse and play movies, shows and music from your own Jellyfin server, with downloads for offline viewing.
+  - **Bookshelf**: an e-book reader for EPUB and TXT with a cover shelf, replacing PixelReader.
+  - **YouTube**: popular videos, search and history through Invidious, no account needed.
+  - **MiiPC**: a sample-based groovebox with pads, sequencer, song mode, mixer and effects.
+- **Tidier Apps tab**: built-in apps are sorted into **Media** and **Settings** groups, and you can move any app between groups.
+- **New default theme**: a warm recolor of Silky by DiMo.
+- **Fixes and speed-ups**: game names are no longer hidden under the box art, the battery icon no longer covers the WiFi icon, and the main menu and apps do less unnecessary work.
 
-<p align="right"><sub><i>Icons by <a href="https://icons8.com" target="_blank">Icons8</a></i></sub></p>
+See [CHANGELOG.md](CHANGELOG.md) for the full list.
+
+## Installing
+
+Download the latest `OnionSoup-v<version>.zip` from [Releases](https://github.com/kodekokeriet/OnionSoup/releases), unzip it to the root of your SD card and start the device. The installer works like Onion's and offers a fresh install, or an update that keeps your settings.
+
+On the Mini+, Onion Soup can update itself over WiFi from this repository's releases with the **Onion Soup OTA update** app (available in Package Manager). Apps from the App Store are updated from inside the App Store.
+
+## Documentation
+
+Most of Onion's documentation still applies to Onion Soup, since the core system is the same:
+
+- [Onion: Getting started](https://onionui.github.io/docs)
+- [Onion: Features](https://onionui.github.io/docs/features)
+- [Onion: FAQ](https://onionui.github.io/docs/faq)
+
+Onion Soup specific documentation:
+
+- [App Store and Game Store](appstore/README.md): how apps are packaged, catalog sources, ports, themes and homebrew
+- [MiiPC](src/miipc/README.md)
+- [Roadmap](ROADMAP.md)
+
+## Building
+
+Onion Soup is built the same way as Onion, inside the Miyoo Mini toolchain Docker image:
+
+```sh
+git clone --recursive https://github.com/kodekokeriet/OnionSoup.git
+cd OnionSoup
+make release   # inside aemiii91/miyoomini-toolchain
+```
+
+The GitHub Actions workflows build the release zip on every push, and the `App Store catalog` workflow packages the App Store apps and publishes the catalog.
+
+## Credits and license
+
+Onion Soup is a fork of [Onion](https://github.com/OnionUI/Onion) by the OnionUI team and its contributors. All credit for the operating system it builds on goes to them. The default theme is based on Silky by DiMo; the original credits are kept in `static/dist/Themes/OnionSoup/`.
+
+Like Onion, Onion Soup is free software licensed under the [GNU General Public License v3.0](LICENSE).

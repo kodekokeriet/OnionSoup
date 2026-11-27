@@ -1,5 +1,5 @@
 name: "Bug Reports Only (Feature Requests and Questions should be raised using one of the community options below)"
-description: Help us improve Onion - File an Onion bug report
+description: Help us improve Onion Soup - File an Onion Soup bug report
 title: "Issue Title"
 labels: ["bug"]
 
@@ -15,18 +15,18 @@ body:
       label: Checklist
       description: Please confirm the following in order to prevent misuse of issues
       options:
-        - label: I am reporting a bug in the Onion OS - Any issues with the closed source frontend ([MainUI](https://github.com/OnionUI/MainUI-issues)), or [RetroArch](https://github.com/libretro/RetroArch) or any of the cores should be directed to their respective repositories
+        - label: I am reporting a bug in Onion Soup - Any issues with the closed source frontend ([MainUI](https://github.com/OnionUI/MainUI-issues)), or [RetroArch](https://github.com/libretro/RetroArch) or any of the cores should be directed to their respective repositories
           required: true
-        - label: I have reviewed the [Onion Docs](https://onionui.github.io/docs) and did not find the answer
+        - label: I have read the [README](https://github.com/kodekokeriet/OnionSoup#readme) and the [Onion Docs](https://onionui.github.io/docs) and did not find the answer
           required: true
         - label: I have searched the existing (open and closed) issues to ensure I do not log a duplicate
           required: true
   - type: input
     id: os
     attributes:
-      label: Onions OS Version
-      description: Provide the version of Onion which you are using
-      placeholder: Visible on the Onion boot screen
+      label: Onion Soup Version
+      description: Provide the version of Onion Soup which you are using
+      placeholder: Visible on the boot screen
     validations:
       required: true
   - type: input
