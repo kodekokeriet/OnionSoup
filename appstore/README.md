@@ -1,20 +1,21 @@
-# OnionSoup App Store
+# Onion Soup App Store
 
-App Store-appen (`App/AppStore` på SD-kortet) laster ned apper over WiFi på Miyoo Mini+.
-Katalogen bygges automatisk fra denne mappen.
+The App Store app (`App/AppStore` on the SD card) downloads apps and themes over WiFi on the Miyoo Mini+.
+The Game Store (`App/GameStore`, which runs `appStore --games`) does the same for ports and homebrew games.
+The catalog is built automatically from this folder.
 
-## Slik legger du til en app
+## Adding an app
 
-1. Lag en mappe `appstore/apps/<AppId>/`. Navnet blir mappen appen havner i: `App/<AppId>/`.
-2. Legg inn filene appen trenger på SD-kortet, minst `config.json` og `launch.sh`, akkurat som en vanlig Onion-app.
-3. Legg til `app.json` med info til butikken:
+1. Create a folder `appstore/apps/<AppId>/`. The name becomes the folder the app is installed to: `App/<AppId>/`.
+2. Add the files the app needs on the SD card, at least `config.json` and `launch.sh`, just like a regular Onion app.
+3. Add an `app.json` with the store information:
 
 ```json
 {
-    "name": "Visningsnavn",
-    "description": "Kort beskrivelse",
+    "name": "Display name",
+    "description": "Short description",
     "version": "1.0.0",
-    "author": "Deg",
+    "author": "You",
     "category": "Tools",
     "devices": ["283", "354"]
 }
@@ -22,48 +23,48 @@ Katalogen bygges automatisk fra denne mappen.
 
 `devices`: `283` = Miyoo Mini, `354` = Miyoo Mini+.
 
-4. Merge til `main`. Workflowen `App Store catalog` pakker hver app som zip, regner ut sha256 og laster opp
-   zip-filene og `catalog.json` til releasen `appstore`.
+4. Merge to `main`. The `App Store catalog` workflow packages each app as a zip, computes its sha256 and uploads
+   the zips and `catalog.json` to the `appstore` release.
 
-**Fast rutine for alle app-fikser:** øk `version` i `app.json` i samme endring som fiksen, og merge til `main`.
-Da bygger workflowen ny pakke, og App Store viser «Oppdater» på enheter som har en eldre versjon.
-Ved oppdatering byttes appens egne filer ut, mens filer brukeren har laget i `App/<AppId>/` (samples, prosjekter o.l.) beholdes.
+**Every app fix bumps `version` in `app.json`** in the same change, and is merged to `main`.
+The workflow then builds a new package, and the App Store shows **Update** on devices that have an older version.
+An update replaces the app's own files and keeps files the user created in `App/<AppId>/` (samples, projects and so on).
 
-Apper fra App Store havner rett i Apps-fanen. Vil du heller at appen legger seg i en gruppe, legger du til
-`"group": "media"` (Media) eller `"group": "settings"` (Settings) i appens `config.json`.
-Brukeren kan alltid flytte appen selv med SELECT inne i en gruppe. Se `.tmp_update/script/app_groups.sh`.
+Apps from the App Store are placed directly in the Apps tab. To place an app in a group instead, add
+`"group": "media"` (Media) or `"group": "settings"` (Settings) to the app's `config.json`.
+Users can always move an app themselves with SELECT inside a group. See `.tmp_update/script/app_groups.sh`.
 
-## Porter fra Ports-Collection
+## Ports from Ports-Collection
 
-Alle portene i [OnionUI/Ports-Collection](https://github.com/OnionUI/Ports-Collection) havner automatisk i App Store.
-`build_ports.sh` leser den siste releasen der og lager én oppføring per port. Den originale `.7z`-filen lastes ned
-direkte fra Ports-Collection og pakkes ut på roten av SD-kortet, akkurat som når du installerer manuelt.
+All ports in [OnionUI/Ports-Collection](https://github.com/OnionUI/Ports-Collection) appear in the Game Store automatically.
+`build_ports.sh` reads the latest release there and creates one entry per port. The original `.7z` file is downloaded
+directly from Ports-Collection and unpacked at the root of the SD card, the same as a manual install.
 
-- **Ports (free)**: komplette og gratis porter.
-- **Ports (own game files)**: bare motoren. Du må selv legge inn originale spillfiler (se `_required_files.txt`).
+- **Ports (free)**: complete, free ports.
+- **Ports (own game files)**: the engine only. You add the original game files yourself (see `_required_files.txt`).
 
-Workflowen kjører hver mandag, så nye porter dukker opp av seg selv. App Store husker hvilke filer hver port
-installerte, og når du fjerner en port, beholdes filer som andre installerte porter også bruker.
-På enheten må «Ports Collection» være slått på i Package Manager.
+The workflow runs every Monday, so new ports show up by themselves. The store remembers which files each port
+installed, and when a port is removed, files that other installed ports also use are kept.
+On the device, "Ports Collection" must be enabled in Package Manager.
 
-## Temaer fra OnionUI/Themes
+## Themes from OnionUI/Themes
 
-Alle temaene i [OnionUI/Themes](https://github.com/OnionUI/Themes) havner automatisk i fanen **Temaer**.
-`build_themes.sh` leser `release/`-mappen der og lager én oppføring per tema eller temapakke, med en
-forhåndsvisning laget fra temaets `preview.png`. Zip-filen lastes ned direkte fra OnionUI/Themes og pakkes ut i
-`Themes/` på SD-kortet. Enheten sjekker nedlastingen mot git-blob-id-en (`git_sha1`), så CI trenger ikke laste ned
-alle temaene (ca. 1 GB) for å regne ut sjekksummer.
+All themes in [OnionUI/Themes](https://github.com/OnionUI/Themes) appear in the **Themes** tab automatically.
+`build_themes.sh` reads the `release/` folder there and creates one entry per theme or theme pack, with a
+preview made from the theme's `preview.png`. The zip is downloaded directly from OnionUI/Themes and unpacked to
+`Themes/` on the SD card. The device checks the download against the git blob id (`git_sha1`), so CI does not have
+to download every theme (about 1 GB) to compute checksums.
 
-I App Store kan man installere et tema, ta det i bruk (`themeSwitcher --apply "<mappe>"`), velge variant i en
-temapakke og fjerne det igjen. Temaet som er i bruk kan ikke fjernes. Featured-listen fra OnionUI/Themes blir
-hyllen «Populære temaer» på forsiden.
+In the App Store you can install a theme, apply it (`themeSwitcher --apply "<folder>"`), pick a variant in a
+theme pack and remove it again. The theme in use cannot be removed. The featured list from OnionUI/Themes becomes
+the "Popular themes" shelf on the front page.
 
-## Navigering
+## Navigation
 
-Lange lister blar opp og ned, ikke sidelengs. Forsiden viser noen få elementer per hylle og en «Se alle»-flis som
-åpner hele listen. I listene gir venstre/høyre en side om gangen, og L2/R2 hopper til forrige/neste forbokstav.
+Long lists scroll up and down, not sideways. The front page shows a few items per shelf and a "See all" tile that
+opens the full list. In lists, Left/Right move one page at a time, and L2/R2 jump to the previous/next first letter.
 
-## Test lokalt
+## Testing locally
 
 ```sh
 appstore/build_catalog.sh /tmp/out "file:///tmp/out"
@@ -80,7 +81,7 @@ automated downloads.) One entry:
 ```json
 {"id": "game-<slug>", "type": "game", "name": "...", "author": "...", "description": "...",
  "version": "1.0", "system": "NES", "url": "https://...", "sha256": "...", "size": 40976,
- "file": "<name>.nes", "extract": false, "image": "https://...", "genre": "Plattform"}
+ "file": "<name>.nes", "extract": false, "image": "https://...", "genre": "Platformer"}
 ```
 
 `system` is the `Emu/<system>` folder the game needs: the Game Store hides games for systems
@@ -106,7 +107,7 @@ An entry with `"type": "romhack"` (via an extra source) is a patch for a ROM the
 The Game Store finds the original by sha1 in `Roms/<system>/`, copies it to `file` and saves the patch next to it
 with the same name, so RetroArch applies it when the game starts. We never ship ROMs.
 
-## Teste en app fra en PR
+## Testing an app from a pull request
 
-App Store-workflowen lagrer app-pakkene som artefakt også på PR-er. `tools/miyoo_app.sh <miyoo-adresse> <AppId> [branch]`
-henter `<AppId>.zip` fra siste vellykkede kjøring på branchen og pakker den ut i `App/<AppId>` over SSH.
+The App Store workflow also saves the app packages as an artifact on pull requests. `tools/miyoo_app.sh <miyoo-address> <AppId> [branch]`
+fetches `<AppId>.zip` from the latest successful run on the branch and unpacks it to `App/<AppId>` over SSH.
