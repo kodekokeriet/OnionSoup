@@ -72,9 +72,10 @@ void gfx_present(void)
     SDL_RenderPresent(ren);
 }
 #else
-/* Miyoo: the panel is mounted upside down. Like the other OnionSoup apps we draw
- * into our own surface and blit it to a hardware video surface; the Miyoo SDL
- * turns that the right way when it flips. MIIPC_FLIP=1 turns it in software
+/* Miyoo: the panel is mounted upside down. The Miyoo SDL only turns the picture
+ * when one HW surface is blitted to another (that blit runs on the MI_GFX
+ * hardware, which rotates it). So, like the other OnionSoup apps, we draw into a
+ * HW surface of our own and blit that to the HW video surface. MIIPC_FLIP=1 turns it in software
  * instead, for an SDL that does not. */
 static SDL_Surface *video;
 static int soft_flip;
@@ -93,7 +94,7 @@ int gfx_init(void)
         video = SDL_SetVideoMode(SCREEN_W, SCREEN_H, 16, SDL_HWSURFACE);
     if (!video)
         return -1;
-    screen = SDL_CreateRGBSurface(SDL_SWSURFACE, SCREEN_W, SCREEN_H, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0);
+    screen = SDL_CreateRGBSurface(SDL_HWSURFACE, SCREEN_W, SCREEN_H, 32, 0, 0, 0, 0);
     if (!screen)
         return -1;
     SDL_ShowCursor(SDL_DISABLE);
