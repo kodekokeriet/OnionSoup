@@ -25,7 +25,9 @@ Katalogen bygges automatisk fra denne mappen.
 4. Merge til `main`. Workflowen `App Store catalog` pakker hver app som zip, regner ut sha256 og laster opp
    zip-filene og `catalog.json` til releasen `appstore`.
 
-For å øke versjonen endrer du `version` i `app.json`. Da viser App Store `[update]` på enheter som har en eldre versjon.
+**Fast rutine for alle app-fikser:** øk `version` i `app.json` i samme endring som fiksen, og merge til `main`.
+Da bygger workflowen ny pakke, og App Store viser «Oppdater» på enheter som har en eldre versjon.
+Ved oppdatering byttes appens egne filer ut, mens filer brukeren har laget i `App/<AppId>/` (samples, prosjekter o.l.) beholdes.
 
 Apper fra App Store havner rett i Apps-fanen. Vil du heller at appen legger seg i en gruppe, legger du til
 `"group": "media"` (Medier) eller `"group": "settings"` (Innstillinger) i appens `config.json`.
