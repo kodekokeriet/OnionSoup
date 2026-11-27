@@ -26,8 +26,8 @@ APPGROUP=${APPGROUP_BIN:-$sysdir/bin/appGroup}
 PROMPT=${PROMPT_BIN:-$sysdir/bin/prompt}
 
 # id folder label
-APP_GROUPS="media Group_Media Medier
-settings Group_Settings Innstillinger"
+APP_GROUPS="media Group_Media Media
+settings Group_Settings Settings"
 
 # Apps that hand control back to the main menu (switch tab, start a game, ...)
 HANDOFF_APPS=" Expert_Mode StartGameSwitcher RandomGamePicker AdvanceMENU Guest_Mode "
@@ -139,7 +139,7 @@ sync_groups() {
                 printf '%s' "$icons" > "$folder/icon.sig"
         fi
 
-        new_config=$(printf '{\n"label":"%s",\n"icon":"%s",\n"launch":"launch.sh",\n"description":"%s apper · %s"\n}\n' \
+        new_config=$(printf '{\n"label":"%s",\n"icon":"%s",\n"launch":"launch.sh",\n"description":"%s apps · %s"\n}\n' \
             "$label" "$folder/icon.png" "$count" "$names")
         if [ "$new_config" != "$(cat "$folder/config.json" 2> /dev/null)" ]; then
             echo "$new_config" > "$folder/config.json"
@@ -207,14 +207,14 @@ move_menu() { # app current-group
     app=$1
     current=$2
     label=$(json_value "$(config_of "$app")" label)
-    set -- "Apps-fanen"
+    set -- "Apps tab"
     targets="top"
     for id in $(group_ids); do
         [ "$id" = "$current" ] && continue
         set -- "$@" "$(group_field "$id" 3)"
         targets="$targets $id"
     done
-    i=$(choose "Flytt $label til" "$@")
+    i=$(choose "Move $label to" "$@")
     [ -z "$i" ] && return
     set_group "$app" "$(echo $targets | cut -d' ' -f$((i + 1)))"
 }
@@ -229,10 +229,10 @@ add_menu() { # group
         apps="$apps $name"
     done
     if [ $# -eq 0 ]; then
-        "$PROMPT" -t "Legg til app" -m "Alle appene ligger allerede i en gruppe." "OK"
+        "$PROMPT" -t "Add app" -m "All apps are already in a group." "OK"
         return
     fi
-    i=$(choose "Legg til i $(group_field "$group" 3)" "$@")
+    i=$(choose "Add to $(group_field "$group" 3)" "$@")
     [ -z "$i" ] && return
     set_group "$(echo $apps | cut -d' ' -f$((i + 1)))" "$group"
 }

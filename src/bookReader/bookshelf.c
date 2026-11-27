@@ -46,7 +46,7 @@ typedef enum { SORT_TITLE,
                SORT_RECENT,
                SORT_ADDED,
                SORT_COUNT } SortMode;
-static const char *sort_names[] = {"Tittel", "Forfatter", "Sist lest", "Nylig lagt til"};
+static const char *sort_names[] = {"Title", "Author", "Last read", "Recently added"};
 
 static char sdcard[256], books_dir[400], state_dir[400], cover_dir[460], lib_path[460], settings_path[460];
 static char ui_font[400], font_dir[420];
@@ -399,10 +399,10 @@ static void build_tabs(void)
             reading = true;
     }
     if (reading) {
-        copy_str(tabs[ntabs].name, sizeof(tabs[0].name), "Leser nå");
+        copy_str(tabs[ntabs].name, sizeof(tabs[0].name), "Reading now");
         tabs[ntabs++].kind = 1;
     }
-    copy_str(tabs[ntabs].name, sizeof(tabs[0].name), "Alle");
+    copy_str(tabs[ntabs].name, sizeof(tabs[0].name), "All");
     tabs[ntabs++].kind = 0;
     for (int i = 0; i < nlib && ntabs < MAX_TABS - 1; i++) {
         if (!*lib[i].folder)
@@ -417,7 +417,7 @@ static void build_tabs(void)
         }
     }
     if (finished) {
-        copy_str(tabs[ntabs].name, sizeof(tabs[0].name), "Ferdig");
+        copy_str(tabs[ntabs].name, sizeof(tabs[0].name), "Finished");
         tabs[ntabs++].kind = 2;
     }
     tab_sel = 0;
@@ -469,13 +469,13 @@ static const char *font_names[] = {"Caladea", "DejaVu Sans"};
 // [font][style]; NULL = slant/embolden the regular face
 static const char *font_files[2][4] = {{"Caladea-Regular.ttf", "Caladea-Bold.ttf", "Caladea-Italic.ttf", "Caladea-BoldItalic.ttf"},
                                        {"DejaVuSans.ttf", "DejaVuSans-Bold.ttf", NULL, NULL}};
-static const char *theme_names[] = {"Mørk", "Sepia", "Lys", "Natt"};
+static const char *theme_names[] = {"Dark", "Sepia", "Light", "Night"};
 static const SDL_Color theme_bg[] = {{37, 32, 29}, {241, 230, 207}, {250, 249, 245}, {0, 0, 0}};
 static const SDL_Color theme_fg[] = {{228, 218, 206}, {62, 46, 30}, {28, 28, 28}, {165, 155, 145}};
 static const SDL_Color theme_dim[] = {{140, 128, 116}, {140, 118, 92}, {130, 130, 130}, {85, 80, 75}};
-static const char *spacing_names[] = {"Tett", "Normal", "Luftig"};
+static const char *spacing_names[] = {"Tight", "Normal", "Airy"};
 static const float spacing_mul[] = {1.05f, 1.25f, 1.5f};
-static const char *margin_names[] = {"Smal", "Normal", "Bred"};
+static const char *margin_names[] = {"Narrow", "Normal", "Wide"};
 static const int margin_px[] = {14, 30, 60};
 
 static void save_settings(void)
@@ -965,10 +965,10 @@ static void draw_loading(const char *what);
 
 static void start_reading(Entry *e, bool from_start)
 {
-    draw_loading("Åpner boka …");
+    draw_loading("Opening the book …");
     book = book_open(e->file, false);
     if (!book) {
-        show_message("Klarte ikke å åpne boka", 2500);
+        show_message("Could not open the book", 2500);
         return;
     }
     reading = e;
@@ -1005,7 +1005,7 @@ static void next_page(void)
         open_chapter(chapter + 1, 0, false);
     else {
         if (!reading->finished)
-            show_message("Slutt. Boka er merket som ferdig lest.", 2500);
+            show_message("The end. The book is marked as finished.", 2500);
         reading->finished = true;
     }
     page_dirty = dirty = true;
@@ -1095,7 +1095,7 @@ static void render_page(void)
         }
     }
     if (doc && doc->nblocks == 0)
-        text(f17, "(Tom side)", (SCREEN_W - text_w(f17, "(Tom side)")) / 2, 200, dim);
+        text(f17, "(Empty page)", (SCREEN_W - text_w(f17, "(Empty page)")) / 2, 200, dim);
 
     // status line
     char ch[200], pos[64];
@@ -1133,7 +1133,7 @@ static void draw_panel_rows(const char *title, int x, int w, int n, int sel, int
 #define NSET 6
 static void settings_row(int i, int x, int y, int w, bool s)
 {
-    static const char *labels[NSET] = {"Tekststørrelse", "Skrift", "Tema", "Linjeavstand", "Marger", "Blokkjustering"};
+    static const char *labels[NSET] = {"Text size", "Font", "Theme", "Line spacing", "Margins", "Justify"};
     char val[40];
     switch (i) {
     case 0:
@@ -1152,7 +1152,7 @@ static void settings_row(int i, int x, int y, int w, bool s)
         copy_str(val, sizeof(val), margin_names[set.margin]);
         break;
     default:
-        copy_str(val, sizeof(val), set.justify ? "På" : "Av");
+        copy_str(val, sizeof(val), set.justify ? "On" : "Off");
     }
     text(f17, labels[i], x, y + 9, s ? C_WHITE : C_SOFT);
     char shown[60];
@@ -1167,7 +1167,7 @@ static void toc_row(int i, int x, int y, int w, bool s)
     if (book->ntoc)
         copy_str(t, sizeof(t), book->toc[i].title);
     else
-        snprintf(t, sizeof(t), "Del %d", i + 1);
+        snprintf(t, sizeof(t), "Part %d", i + 1);
     bool current = ch == chapter || (book->ntoc && ch < chapter && (i + 1 >= book->ntoc || book->toc[i + 1].chapter > chapter));
     text_fit(f17, t, x, y + 9, w - 20, current ? C_ACCENT : (s ? C_WHITE : C_SOFT));
     if (current)
@@ -1182,12 +1182,12 @@ static void draw_reader(void)
         render_page();
     SDL_BlitSurface(page_cache, NULL, screen, NULL);
     if (overlay == OV_SETTINGS) {
-        draw_panel_rows("Lesing", SCREEN_W - 330, 330, NSET, ov_sel, 0, NSET, settings_row);
+        draw_panel_rows("Reading", SCREEN_W - 330, 330, NSET, ov_sel, 0, NSET, settings_row);
         int x = SCREEN_W - 330;
         fill(x, BOTTOM_Y, 330, SCREEN_H - BOTTOM_Y, C_BAR);
         fill(x, BOTTOM_Y, 3, SCREEN_H - BOTTOM_Y, C_ACCENT);
         int hx = x + 20;
-        const char *keys[] = {"←→", "B"}, *labels[] = {"Endre", "Lukk"};
+        const char *keys[] = {"←→", "B"}, *labels[] = {"Change", "Close"};
         for (int i = 0; i < 2; i++) {
             int kw = text_w(f15, keys[i]);
             int bw = kw + 12 < 22 ? 22 : kw + 12;
@@ -1197,7 +1197,7 @@ static void draw_reader(void)
             hx += bw + 6 + text_w(f15, labels[i]) + 20;
         }
         // live preview line
-        text(f13, "Endringer vises på siden med en gang.", x + 26, TOP_H + 10 + NSET * 46 + 8, C_GREY);
+        text(f13, "Changes show on the page right away.", x + 26, TOP_H + 10 + NSET * 46 + 8, C_GREY);
     }
     else if (overlay == OV_TOC) {
         int n = toc_count(), visible = 8;
@@ -1205,12 +1205,12 @@ static void draw_reader(void)
             ov_scroll = ov_sel;
         if (ov_sel >= ov_scroll + visible)
             ov_scroll = ov_sel - visible + 1;
-        draw_panel_rows("Innhold", SCREEN_W - 400, 400, n, ov_sel, ov_scroll, visible, toc_row);
+        draw_panel_rows("Contents", SCREEN_W - 400, 400, n, ov_sel, ov_scroll, visible, toc_row);
         int x = SCREEN_W - 400;
         fill(x, BOTTOM_Y, 400, SCREEN_H - BOTTOM_Y, C_BAR);
         fill(x, BOTTOM_Y, 3, SCREEN_H - BOTTOM_Y, C_ACCENT);
         int hx = x + 20;
-        const char *keys[] = {"A", "B"}, *labels[] = {"Gå til", "Lukk"};
+        const char *keys[] = {"A", "B"}, *labels[] = {"Go to", "Close"};
         for (int i = 0; i < 2; i++) {
             int kw = text_w(f15, keys[i]);
             int bw = kw + 12 < 22 ? 22 : kw + 12;
@@ -1232,7 +1232,7 @@ static void draw_reader(void)
 
 static void draw_topbar(void)
 {
-    soup_logo("Bøker");
+    soup_logo("Books");
     if (scr != S_SHELF || ntabs == 0)
         return;
     int tx = SCREEN_W - 16;
@@ -1265,26 +1265,26 @@ static void draw_hint_bar(void)
 #define HINT(a, b) (k[n] = (a), l[n] = (b), n++)
     if (scr == S_SHELF) {
         if (nview)
-            HINT("A", "Åpne");
-        HINT("B", "Avslutt");
+            HINT("A", "Open");
+        HINT("B", "Exit");
         if (ntabs > 1)
-            HINT("L/R", "Hylle");
+            HINT("L/R", "Shelf");
         if (tabs[tab_sel].kind != 1)
-            HINT("X", "Sorter");
+            HINT("X", "Sort");
         bool any = false;
         for (int i = 0; i < nlib; i++)
             if (lib[i].last_read > 0 && !lib[i].finished)
                 any = true;
         if (any)
-            HINT("Y", "Fortsett");
+            HINT("Y", "Continue");
     }
     else if (scr == S_DETAIL) {
         bool started = detail->last_read > 0 && !detail->finished && detail->progress > 0;
-        HINT("A", started ? "Fortsett" : "Les");
+        HINT("A", started ? "Continue" : "Read");
         if (started)
-            HINT("X", "Fra start");
-        HINT("Y", detail->finished ? "Merk som ulest" : "Merk som lest");
-        HINT("B", "Tilbake");
+            HINT("X", "From start");
+        HINT("Y", detail->finished ? "Mark as unread" : "Mark as read");
+        HINT("B", "Back");
     }
     draw_hints(k, l, n);
 #undef HINT
@@ -1326,19 +1326,19 @@ static void draw_shelf(void)
 {
     Tab *t = &tabs[tab_sel];
     char head[200], count[120];
-    copy_str(head, sizeof(head), t->kind == 0 ? "Alle bøker" : t->name);
+    copy_str(head, sizeof(head), t->kind == 0 ? "All books" : t->name);
     text_fit(f19, head, 24, TOP_H + 8, 300, C_WHITE);
-    snprintf(count, sizeof(count), "%d %s%s%s", nview, nview == 1 ? "bok" : "bøker", t->kind == 1 ? "" : "  ·  ",
+    snprintf(count, sizeof(count), "%d %s%s%s", nview, nview == 1 ? "book" : "books", t->kind == 1 ? "" : "  ·  ",
              t->kind == 1 ? "" : sort_names[sort_mode]);
     text(f15, count, SCREEN_W - 24 - text_w(f15, count), TOP_H + 12, C_GREY);
     if (nlib == 0) {
-        draw_center_text("Ingen bøker ennå",
-                         "Legg EPUB- eller TXT-filer i mappen Media/Books på minnekortet. Undermapper blir egne hyller.",
+        draw_center_text("No books yet",
+                         "Put EPUB or TXT files in the Media/Books folder on the SD card. Subfolders become their own shelves.",
                          C_WHITE);
         return;
     }
     if (nview == 0) {
-        draw_center_text("Tomt", "Ingen bøker her.", C_GREY);
+        draw_center_text("Empty", "No books here.", C_GREY);
         return;
     }
     if (view_sel >= nview)
@@ -1401,20 +1401,20 @@ static void draw_detail(void)
     for (int i = 0; ext && ext[i + 1] && i < 6; i++)
         ext_up[i] = toupper((unsigned char)ext[i + 1]), ext_up[i + 1] = '\0';
     if (detail_chapters > 1)
-        snprintf(meta, sizeof(meta), "%s  ·  %s  ·  %d kapitler", ext_up, size, detail_chapters);
+        snprintf(meta, sizeof(meta), "%s  ·  %s  ·  %d chapters", ext_up, size, detail_chapters);
     else
         snprintf(meta, sizeof(meta), "%s  ·  %s", ext_up, size);
     text_fit(f15, meta, x, y + 2, w, C_GREY);
     y += 30;
-    text_wrap(f15, detail_desc && *detail_desc ? detail_desc : "Ingen beskrivelse.", x, y, w, 21, 5, C_SOFT);
+    text_wrap(f15, detail_desc && *detail_desc ? detail_desc : "No description.", x, y, w, 21, 5, C_SOFT);
 
     int by = TOP_H + 222;
     bool started = e->last_read > 0 && !e->finished && e->progress > 0;
     char label[48];
     if (started)
-        snprintf(label, sizeof(label), "Fortsett  ·  %d %%", (int)(e->progress * 100 + 0.5));
+        snprintf(label, sizeof(label), "Continue  ·  %d %%", (int)(e->progress * 100 + 0.5));
     else
-        copy_str(label, sizeof(label), e->finished ? "Les på nytt" : "Les");
+        copy_str(label, sizeof(label), e->finished ? "Read again" : "Read");
     int lw = text_w(f19, label) + 40;
     fill_round(x, by, lw, 36, 18, C_ACCENT);
     text(f19, label, x + 20, by + 6, C_DARK);
@@ -1426,12 +1426,12 @@ static void draw_detail(void)
             fill_round(x + 18, by + 42, fw, 4, 2, C_ACCENT);
     }
     else if (e->finished)
-        text(f15, "Ferdig lest", x + lw + 16, by + 9, C_GREEN);
+        text(f15, "Finished", x + lw + 16, by + 9, C_GREEN);
     if (e->last_read > 0) {
         char when[80];
         time_t tt = e->last_read;
         struct tm *tm = localtime(&tt);
-        strftime(when, sizeof(when), "Sist lest %d.%m.%Y", tm);
+        strftime(when, sizeof(when), "Last read %d.%m.%Y", tm);
         text(f13, when, x, by + 56, C_GREY);
     }
 }
@@ -1439,7 +1439,7 @@ static void draw_detail(void)
 static void draw_loading(const char *what)
 {
     SDL_FillRect(screen, NULL, map(screen, C_BG));
-    soup_logo("Bøker");
+    soup_logo("Books");
     text(f24, what, (SCREEN_W - text_w(f24, what)) / 2, 210, C_WHITE);
     SDL_BlitSurface(screen, NULL, video, NULL);
     SDL_Flip(video);
@@ -1767,7 +1767,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "bokhylle: cannot open font %s\n", ui_font);
         return 1;
     }
-    draw_loading("Finner bøker …");
+    draw_loading("Finding books …");
     load_settings();
     load_library();
     refresh_shelf();

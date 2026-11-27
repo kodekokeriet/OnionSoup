@@ -95,9 +95,9 @@ while IFS=$'\t' read -r sha path; do
 	count=$(jq length <<< "$variants")
 	if [ -z "$desc" ]; then
 		if [ "$count" -gt 1 ]; then
-			desc="Temapakke med $count varianter. Velg hvilken du vil bruke."
+			desc="Theme pack with $count variants. Pick the one you want."
 		else
-			desc="Tema fra Onion-fellesskapet."
+			desc="Theme from the Onion community."
 		fi
 	fi
 	featured=$(grep -nxF "$theme" "$featured_file" | head -1 | cut -d: -f1 || true)

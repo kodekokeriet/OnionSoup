@@ -1,6 +1,6 @@
 {
     "name": "MiiPC",
-    "description": "Sample-basert groovebox: pads på A/B/X/Y med 4 banker, chopping, lineær sequencer, song mode, mikser og effekter. Laster WAV-filer fra SD-kortet. Virker på alle Miyoo Mini-modeller.",
+    "description": "Sample-based groovebox: pads on A/B/X/Y with 4 banks, chopping, linear sequencer, song mode, mixer and effects. Loads WAV files from the SD card. Works on all Miyoo Mini models.",
     "version": "0.4.2",
     "author": "kodekokeriet",
     "category": "Music",

@@ -1,0 +1,6 @@
+{
+	"label": "Onion Soup OTA update",
+	"icon": "/mnt/SDCARD/Icons/Default/app/pacman.png",
+	"launch": "launch.sh",
+	"description": "Update Onion Soup over the internet"
+}

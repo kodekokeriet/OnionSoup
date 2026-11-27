@@ -1,4 +1,4 @@
-// appGroup: shows one app group from the Apps tab ("Medier", "Innstillinger")
+// appGroup: shows one app group from the Apps tab ("Media", "Settings")
 // as a list in the same style as MainUI, and makes the group icon collage.
 //
 //   appGroup list <title> <members file> [-s <index>]
@@ -6,7 +6,7 @@
 //       line). Writes the chosen folder name to /tmp/app_group_choice and the
 //       list position to /tmp/app_group_index. Exit codes:
 //         0 = open the chosen app, 1 = back, 2 = move the chosen app (SELECT),
-//         3 = "Legg til app" row chosen
+//         3 = "Add app" row chosen
 //
 //   appGroup icon <out.png> <icon1> [icon2] [icon3] [icon4]
 //       Writes a 2x2 collage of the given icons, used as the group's icon.
@@ -144,8 +144,8 @@ static int run_list(const char *title, const char *members_path, int selected)
 
     // Last row: pull an app from the top level of the Apps tab into this group
     ListItem add = {.action_id = -1};
-    strcpy(add.label, "+ Legg til app");
-    strcpy(add.description, "Flytt en app fra Apps-fanen hit");
+    strcpy(add.label, "+ Add app");
+    strcpy(add.description, "Move an app here from the Apps tab");
     char add_icon[STR_MAX * 2];
     snprintf(add_icon, sizeof(add_icon), "%s/../.tmp_update/res/app_group_add.png", app_dir());
     add.icon_ptr = load_icon(add_icon, ICON_MAX);
@@ -230,7 +230,7 @@ static int run_list(const char *title, const char *members_path, int selected)
                 theme_renderList(screen, &list);
             if (footer_changed) {
                 theme_renderFooter(screen);
-                theme_renderStandardHint(screen, "Åpne", "Tilbake    SELECT  Flytt");
+                theme_renderStandardHint(screen, "Open", "Back    SELECT  Move");
             }
             if (footer_changed || list_changed)
                 theme_renderFooterStatus(screen, list.active_pos + 1, list.item_count);

@@ -1,6 +1,6 @@
 {
-"label":"Bokhylle",
+"label":"Bookshelf",
 "icon":"icon.png",
 "launch":"launch.sh",
-"description":"Ebøker (EPUB og TXT)"
+"description":"E-books (EPUB and TXT)"
 }

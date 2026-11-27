@@ -591,7 +591,7 @@ show_app() {
 
 main() {
 	clear
-	echo -e "${BLUE}===== OnionSoup App Store =====${NC}\n"
+	echo -e "${BLUE}===== Onion Soup App Store =====${NC}\n"
 
 	prepare_network
 	fetch_catalog
