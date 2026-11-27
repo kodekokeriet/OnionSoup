@@ -2,6 +2,6 @@
 "label":"YouTube",
 "icon":"icon.png",
 "launch":"launch.sh",
-"description":"Populære videoer, søk og nedlasting",
+"description":"Popular videos and search",
 "group":"media"
 }

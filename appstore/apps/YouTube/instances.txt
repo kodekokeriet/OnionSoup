@@ -6,3 +6,5 @@ https://yewtu.be
 https://invidious.nerdvpn.de
 https://invidious.f5.si
 https://iv.melmac.space
+# Piped API servers are tried when no Invidious server can play a video.
+# Add your own as: piped https://pipedapi.example.com

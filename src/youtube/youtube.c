@@ -4,12 +4,10 @@
 // no Google account or API key is needed and the video comes as a plain MP4
 // (itag 18: 360p H.264 + AAC) that the Miyoo can decode.
 //
-// - Tabs: Populært, Søk, Lagret (downloaded), Historikk
+// - Tabs: Popular, Search, History
 // - A plays: the app exits with code 10 and writes /tmp/youtube_play;
 //   launch.sh downloads the stream with curl and plays it with jfplayer
 //   while it downloads (seeking works in the part already downloaded)
-// - X downloads to SDCARD/YouTube for offline viewing, Y removes
-// - SELECT switches to the next Invidious server
 //
 // Servers are read from instances.txt next to the app (one https://... per
 // line); if none answer, the public list from api.invidious.io is tried.
@@ -82,10 +80,9 @@ typedef struct {
 
 enum { T_POPULAR,
        T_SEARCH,
-       T_SAVED,
        T_HISTORY,
        T_COUNT };
-static Tab tabs[T_COUNT] = {{"Populært"}, {"Søk"}, {"Lagret"}, {"Historikk"}};
+static Tab tabs[T_COUNT] = {{"Popular"}, {"Search"}, {"History"}};
 static int cur = T_POPULAR;
 
 static char sdcard[256], appdir[300], font_path[300], curl_bin[300], ffmpeg_bin[300];
@@ -95,7 +92,7 @@ static int inst_count = 0, inst_cur = 0;
 static char query[200] = "";
 static bool quit = false;
 static char message[200] = "";
-static Uint32 message_until = 0, confirm_until = 0;
+static Uint32 message_until = 0;
 static pid_t img_pid = 0;
 static Video *img_video = NULL;
 static char *script = NULL, *spos = NULL;
@@ -166,11 +163,11 @@ static void fmt_length(long s, char *out, size_t n)
 static void fmt_views(long v, char *out, size_t n)
 {
     if (v >= 1000000)
-        snprintf(out, n, "%.1f mill. visninger", v / 1e6);
+        snprintf(out, n, "%.1fM views", v / 1e6);
     else if (v >= 1000)
-        snprintf(out, n, "%ld k visninger", v / 1000);
+        snprintf(out, n, "%ldK views", v / 1000);
     else if (v > 0)
-        snprintf(out, n, "%ld visninger", v);
+        snprintf(out, n, "%ld views", v);
     else
         *out = '\0';
 }
@@ -384,7 +381,7 @@ static void load_popular(void)
 {
     Tab *t = &tabs[T_POPULAR];
     free_tab(t);
-    busy("Henter populære videoer …");
+    busy("Loading popular videos …");
     cJSON *j = api("/api/v1/trending?region=NO");
     if (!j || !cJSON_GetArraySize(j)) {
         cJSON_Delete(j);
@@ -393,14 +390,14 @@ static void load_popular(void)
     fill_from_json(t, j);
     cJSON_Delete(j);
     if (!t->count)
-        copy_str(t->error, sizeof(t->error), "Fant ingen Invidious-server som svarer. Sjekk WiFi, eller trykk SELECT for å prøve en annen server.");
+        copy_str(t->error, sizeof(t->error), "No server answered. Check WiFi and try again.");
     t->loaded = true;
     message_until = 0;
 }
 
 static void do_search(void)
 {
-    const char *r = launch_keyboard(query, "Søk på YouTube");
+    const char *r = launch_keyboard(query, "Search YouTube");
     if (!r)
         return;
     char q[200];
@@ -418,59 +415,19 @@ static void do_search(void)
     Tab *t = &tabs[T_SEARCH];
     free_tab(t);
     cur = T_SEARCH;
-    busy("Søker …");
+    busy("Searching …");
     char enc[600], path[700];
     url_encode(query, enc, sizeof(enc));
     snprintf(path, sizeof(path), "/api/v1/search?type=video&q=%s", enc);
     cJSON *j = api(path);
     fill_from_json(t, j);
     if (!j)
-        copy_str(t->error, sizeof(t->error), "Søket feilet. Sjekk WiFi, eller trykk SELECT for å prøve en annen server.");
+        copy_str(t->error, sizeof(t->error), "Search failed. Check WiFi and try again.");
     else if (!t->count)
-        snprintf(t->error, sizeof(t->error), "Ingen treff for «%s».", query);
+        snprintf(t->error, sizeof(t->error), "No results for \"%.100s\".", query);
     cJSON_Delete(j);
     t->loaded = true;
     message_until = 0;
-}
-
-// Saved videos: SDCARD/YouTube/<id>.mp4 with <id>.txt (title, author, length)
-static void read_meta(const char *path, Tab *t, const char *id)
-{
-    char line[400] = "";
-    read_file_line(path, line, sizeof(line));
-    char *f[3] = {line, "", "0"};
-    for (int i = 1; i < 3; i++) {
-        char *tab = strchr(f[i - 1], '\t');
-        if (!tab)
-            break;
-        *tab = '\0';
-        f[i] = tab + 1;
-    }
-    add_video(t, id, *f[0] ? f[0] : id, f[1], atol(f[2]), 0);
-}
-
-static void load_saved(void)
-{
-    Tab *t = &tabs[T_SAVED];
-    int sel = t->sel;
-    free_tab(t);
-    DIR *d = opendir(save_dir);
-    struct dirent *e;
-    while (d && (e = readdir(d))) {
-        size_t l = strlen(e->d_name);
-        if (l < 5 || strcmp(e->d_name + l - 4, ".txt"))
-            continue;
-        char id[16], path[700];
-        snprintf(id, sizeof(id), "%.*s", (int)(l - 4), e->d_name);
-        snprintf(path, sizeof(path), "%s/%s", save_dir, e->d_name);
-        read_meta(path, t, id);
-    }
-    if (d)
-        closedir(d);
-    t->sel = sel < t->count ? sel : (t->count ? t->count - 1 : 0);
-    if (!t->count)
-        copy_str(t->error, sizeof(t->error), "Ingen lagrede videoer ennå. Trykk X på en video for å laste den ned.");
-    t->loaded = true;
 }
 
 static void load_history(void)
@@ -494,7 +451,7 @@ static void load_history(void)
     if (f)
         fclose(f);
     if (!t->count)
-        copy_str(t->error, sizeof(t->error), "Videoer du ser på havner her.");
+        copy_str(t->error, sizeof(t->error), "Videos you watch show up here.");
     t->loaded = true;
 }
 
@@ -527,29 +484,10 @@ static void open_tab(int i)
     Tab *t = &tabs[i];
     if (i == T_SEARCH && !t->count)
         t->sel = -1; // the search field
-    if (i == T_SAVED)
-        load_saved();
-    else if (i == T_HISTORY && !t->loaded)
+    if (i == T_HISTORY && !t->loaded)
         load_history();
     else if (i == T_POPULAR && !t->loaded)
         load_popular();
-}
-
-/* ---------- downloads ---------- */
-
-static void saved_path(const char *id, const char *ext, char *out, size_t n)
-{
-    snprintf(out, n, "%s/%s%s", save_dir, id, ext);
-}
-
-static int saved_state(const char *id) // 0 no, 1 downloading, 2 done
-{
-    char p[400];
-    saved_path(id, ".mp4", p, sizeof(p));
-    if (access(p, F_OK) == 0)
-        return 2;
-    saved_path(id, ".mp4.part", p, sizeof(p));
-    return access(p, F_OK) == 0 ? 1 : 0;
 }
 
 static void yt_log(const char *fmt, ...)
@@ -567,65 +505,153 @@ static void yt_log(const char *fmt, ...)
     fclose(f);
 }
 
-// Does the URL deliver video data? Fetches the first 2 KB.
+// Does the URL deliver an MP4? Fetches the first 2 KB and looks for the
+// "ftyp" box (some servers answer 200 with a bot-check web page).
 static bool probe(const char *url)
 {
+    const char *tmp = "/tmp/youtube_probe";
+    remove(tmp);
     pid_t pid = fork();
     if (pid == 0) {
         int dn = open("/dev/null", O_RDWR);
         dup2(dn, 1);
         dup2(dn, 2);
         execlp(curl_bin, curl_bin, "-s", "-k", "-L", "-f", "-m", "15", "-r", "0-2047", "-A", "Mozilla/5.0 OnionSoup",
-               "-o", "/dev/null", url, (char *)NULL);
+               "-o", tmp, url, (char *)NULL);
         _exit(127);
     }
     int st = 0;
     if (pid > 0)
         waitpid(pid, &st, 0);
-    return pid > 0 && WIFEXITED(st) && WEXITSTATUS(st) == 0;
+    unsigned char head[12] = {0};
+    FILE *f = fopen(tmp, "rb");
+    size_t got = f ? fread(head, 1, sizeof(head), f) : 0;
+    if (f)
+        fclose(f);
+    remove(tmp);
+    return got >= 8 && !memcmp(head + 4, "ftyp", 4);
 }
 
-// Find a playable MP4 URL (360p, itag 18) on one of the servers. Servers
-// often answer search but cannot play (YouTube blocks them), so every
-// candidate is tested before it is used.
+// Invidious: the 360p MP4 (itag 18) through the server's own proxy
+static bool try_invidious(const char *base, const char *id, char *url, size_t n)
+{
+    char path[400];
+    snprintf(path, sizeof(path), "%s/api/v1/videos/%s?local=true&fields=formatStreams", base, id);
+    char *res = http_get(path, 15);
+    cJSON *j = res ? cJSON_Parse(res) : NULL;
+    free(res);
+    cJSON *fs = cJSON_GetObjectItem(j, "formatStreams"), *o, *pick = NULL;
+    cJSON_ArrayForEach(o, fs)
+    {
+        cJSON *itag = cJSON_GetObjectItem(o, "itag");
+        bool is18 = (cJSON_IsString(itag) && !strcmp(itag->valuestring, "18")) ||
+                    (cJSON_IsNumber(itag) && itag->valueint == 18);
+        if (is18 || (!pick && strstr(jstr(o, "type"), "mp4")))
+            pick = o;
+        if (is18)
+            break;
+    }
+    const char *u = pick ? jstr(pick, "url") : "";
+    bool ok = false;
+    if (*u) {
+        snprintf(url, n, "%s%s", *u == '/' ? base : "", u);
+        ok = probe(url);
+        yt_log("%s: api url %s", base, ok ? "ok" : "failed");
+    }
+    else
+        yt_log("%s: no formatStreams", base);
+    cJSON_Delete(j);
+    if (!ok) {
+        snprintf(url, n, "%s/latest_version?id=%s&itag=18&local=true", base, id);
+        ok = probe(url);
+        yt_log("%s: latest_version %s", base, ok ? "ok" : "failed");
+    }
+    return ok;
+}
+
+// Piped: /streams/<id> lists MP4 streams with video and sound (videoOnly false)
+static bool try_piped(const char *api_base, const char *id, char *url, size_t n)
+{
+    char path[400];
+    snprintf(path, sizeof(path), "%s/streams/%s", api_base, id);
+    char *res = http_get(path, 15);
+    cJSON *j = res ? cJSON_Parse(res) : NULL;
+    free(res);
+    cJSON *o, *pick = NULL;
+    int best = 0;
+    cJSON_ArrayForEach(o, cJSON_GetObjectItem(j, "videoStreams"))
+    {
+        if (cJSON_IsTrue(cJSON_GetObjectItem(o, "videoOnly")) || !strstr(jstr(o, "mimeType"), "mp4"))
+            continue;
+        int h = atoi(jstr(o, "quality")); // "360p"
+        int score = h == 360 ? 1000 : (h > 0 && h < 480 ? h : 1);
+        if (score > best) {
+            best = score;
+            pick = o;
+        }
+    }
+    bool ok = false;
+    if (pick) {
+        copy_str(url, n, jstr(pick, "url"));
+        ok = *url && probe(url);
+        yt_log("piped %s: %s", api_base, ok ? "ok" : "stream failed");
+    }
+    else
+        yt_log("piped %s: no muxed mp4", api_base);
+    cJSON_Delete(j);
+    return ok;
+}
+
+static char piped[MAX_INST][120];
+static int piped_count = 0;
+
+static void add_piped(const char *u)
+{
+    if (piped_count >= MAX_INST || strncmp(u, "https://", 8))
+        return;
+    for (int i = 0; i < piped_count; i++)
+        if (!strcmp(piped[i], u))
+            return;
+    copy_str(piped[piped_count], sizeof(piped[0]), u);
+    size_t l = strlen(piped[piped_count]);
+    while (l && piped[piped_count][l - 1] == '/')
+        piped[piped_count][--l] = '\0';
+    piped_count++;
+}
+
+static void load_piped(void)
+{
+    if (piped_count)
+        return;
+    // "piped https://..." lines in instances.txt, then the public list
+    char path[400], line[200];
+    snprintf(path, sizeof(path), "%s/instances.txt", appdir);
+    FILE *f = fopen(path, "r");
+    while (f && fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n#")] = '\0';
+        if (!strncmp(line, "piped ", 6))
+            add_piped(line + 6);
+    }
+    if (f)
+        fclose(f);
+    char *res = http_get("https://piped-instances.kavin.rocks/", 10);
+    cJSON *j = res ? cJSON_Parse(res) : NULL;
+    free(res);
+    cJSON *o;
+    cJSON_ArrayForEach(o, j) add_piped(jstr(o, "api_url"));
+    cJSON_Delete(j);
+    add_piped("https://pipedapi.kavin.rocks");
+}
+
+// Find a playable MP4 URL on one of the servers. Servers often answer search
+// but cannot play (YouTube blocks them), so every candidate is tested first.
 static bool resolve_stream(const char *id, char *out, size_t n)
 {
-    busy("Finner videoen …");
+    busy("Finding the video …");
+    char url[1600];
     for (int k = 0; k < inst_count; k++) {
         int i = (inst_cur + k) % inst_count;
-        const char *base = instances[i];
-        char url[1600], path[400];
-        snprintf(path, sizeof(path), "%s/api/v1/videos/%s?local=true&fields=formatStreams", base, id);
-        char *res = http_get(path, 15);
-        cJSON *j = res ? cJSON_Parse(res) : NULL;
-        free(res);
-        cJSON *fs = cJSON_GetObjectItem(j, "formatStreams"), *o, *pick = NULL;
-        cJSON_ArrayForEach(o, fs)
-        {
-            cJSON *itag = cJSON_GetObjectItem(o, "itag");
-            bool is18 = (cJSON_IsString(itag) && !strcmp(itag->valuestring, "18")) ||
-                        (cJSON_IsNumber(itag) && itag->valueint == 18);
-            if (is18 || (!pick && strstr(jstr(o, "type"), "mp4")))
-                pick = o;
-            if (is18)
-                break;
-        }
-        const char *u = pick ? jstr(pick, "url") : "";
-        bool ok = false;
-        if (*u) {
-            snprintf(url, sizeof(url), "%s%s", *u == '/' ? base : "", u);
-            ok = probe(url);
-            yt_log("%s: api url %s", base, ok ? "ok" : "failed");
-        }
-        else
-            yt_log("%s: no formatStreams", base);
-        cJSON_Delete(j);
-        if (!ok) {
-            snprintf(url, sizeof(url), "%s/latest_version?id=%s&itag=18&local=true", base, id);
-            ok = probe(url);
-            yt_log("%s: latest_version %s", base, ok ? "ok" : "failed");
-        }
-        if (ok) {
+        if (try_invidious(instances[i], id, url, sizeof(url))) {
             if (i != inst_cur) {
                 inst_cur = i;
                 save_instance();
@@ -635,62 +661,16 @@ static bool resolve_stream(const char *id, char *out, size_t n)
             return true;
         }
     }
-    show_message("Ingen server kunne spille videoen. Prøv igjen senere.", 4000);
-    return false;
-}
-
-static void download(Video *v)
-{
-    if (saved_state(v->id)) {
-        show_message(saved_state(v->id) == 2 ? "Allerede lagret" : "Lastes allerede ned", 2000);
-        return;
-    }
-    char meta[400], part[400], done[400], url[1600];
-    saved_path(v->id, ".txt", meta, sizeof(meta));
-    saved_path(v->id, ".mp4.part", part, sizeof(part));
-    saved_path(v->id, ".mp4", done, sizeof(done));
-    if (!resolve_stream(v->id, url, sizeof(url)))
-        return;
-    FILE *f = fopen(meta, "w");
-    if (!f) {
-        show_message("Kunne ikke lagre på minnekortet", 3000);
-        return;
-    }
-    fprintf(f, "%s\t%s\t%ld\n", v->title, v->author, v->length);
-    fclose(f);
-    close(open(part, O_WRONLY | O_CREAT, 0644));
-    // the download keeps going after the app exits (double fork)
-    pid_t pid = fork();
-    if (pid == 0) {
-        setsid();
-        if (fork() == 0) {
-            int dn = open("/dev/null", O_RDWR);
-            dup2(dn, 0);
-            dup2(dn, 1);
-            dup2(dn, 2);
-            execl("/bin/sh", "sh", "-c",
-                  "\"$0\" -s -k -L -f --retry 3 -m 21600 -o \"$1\" \"$2\" && mv \"$1\" \"$3\" || "
-                  "{ rm -f \"$1\" \"$4\"; }",
-                  curl_bin, part, url, done, meta, (char *)NULL);
-            _exit(127);
+    busy("Trying more servers …");
+    load_piped();
+    for (int i = 0; i < piped_count && i < 8; i++)
+        if (try_piped(piped[i], id, url, sizeof(url))) {
+            copy_str(out, n, url);
+            message_until = 0;
+            return true;
         }
-        _exit(0);
-    }
-    if (pid > 0)
-        waitpid(pid, NULL, 0);
-    show_message("Laster ned – finnes snart under Lagret", 2500);
-}
-
-static void delete_saved(Video *v)
-{
-    char p[400];
-    const char *exts[] = {".mp4", ".mp4.part", ".txt"};
-    for (int i = 0; i < 3; i++) {
-        saved_path(v->id, exts[i], p, sizeof(p));
-        remove(p);
-    }
-    show_message("Slettet", 1500);
-    load_saved();
+    show_message("No server can deliver this video right now. Try again later.", 4000);
+    return false;
 }
 
 /* ---------- thumbnails ---------- */
@@ -833,21 +813,16 @@ static bool restore_state(void)
 
 static void play(Video *v)
 {
-    char p[400], url[1600] = "";
-    saved_path(v->id, ".mp4", p, sizeof(p));
-    bool local = access(p, R_OK) == 0;
-    if (!local && !resolve_stream(v->id, url, sizeof(url)))
+    char url[1600] = "";
+    if (!resolve_stream(v->id, url, sizeof(url)))
         return;
     FILE *f = fopen("/tmp/youtube_play", "w");
     if (!f) {
-        show_message("Kunne ikke starte avspilling", 3000);
+        show_message("Could not start playback", 3000);
         return;
     }
     fprintf(f, "title=%s\nduration=%ld\n", v->title, v->length);
-    if (local)
-        fprintf(f, "url=%s\nlocal=1\n", p);
-    else
-        fprintf(f, "stream=%s\n", url);
+    fprintf(f, "stream=%s\n", url);
     fclose(f);
     add_history(v);
     save_state();
@@ -883,7 +858,7 @@ static void draw_list(void)
         // the search field
         bool s = t->sel < 0;
         outline_round(16, y0, SCREEN_W - 32, 40, 20, 2, s ? C_ACCENT : C_PANEL, C_PANEL);
-        text_fit(f17, *query ? query : "Trykk A eller START for å søke …", 34, y0 + 9, SCREEN_W - 80,
+        text_fit(f17, *query ? query : "Press A or START to search …", 34, y0 + 9, SCREEN_W - 80,
                  *query ? C_WHITE : C_GREY);
         y0 += 50;
     }
@@ -923,14 +898,6 @@ static void draw_list(void)
         char sub[200], views[48];
         fmt_views(v->views, views, sizeof(views));
         snprintf(sub, sizeof(sub), "%s%s%s", v->author, *views && *v->author ? "  ·  " : "", views);
-        int st = saved_state(v->id);
-        if (st && cur != T_SAVED) {
-            const char *b = st == 2 ? "LAGRET" : "LASTER NED";
-            text(f13, b, SCREEN_W - 32 - text_w(f13, b), y + 52, C_ACCENT);
-            maxw -= text_w(f13, b) + 16;
-        }
-        else if (st == 1)
-            copy_str(sub, sizeof(sub), "Laster ned …");
         text_fit(f15, sub, x, y + 50, maxw, C_GREY);
     }
 }
@@ -945,18 +912,12 @@ static void draw(void)
     int n = 0;
 #define HINT(a, b) (k[n] = (a), l[n] = (b), n++)
     if (t->count && t->sel >= 0) {
-        HINT("A", "Spill av");
-        if (cur == T_SAVED)
-            HINT("Y", "Slett");
-        else if (!saved_state(t->items[t->sel].id))
-            HINT("X", "Last ned");
+        HINT("A", "Play");
     }
     else if (cur == T_SEARCH)
-        HINT("A", "Søk");
-    HINT("L/R", "Fane");
-    HINT("B", "Avslutt");
-    if (cur != T_SAVED)
-        HINT("SELECT", "Server");
+        HINT("A", "Search");
+    HINT("L/R", "Tab");
+    HINT("B", "Exit");
 #undef HINT
     draw_hints(k, l, n);
     if (*message && SDL_GetTicks() < message_until) {
@@ -976,8 +937,6 @@ static void on_key(SDLKey key)
 {
     Tab *t = &tabs[cur];
     int top = cur == T_SEARCH ? -1 : 0; // -1 is the search field
-    if (key != SW_BTN_Y)
-        confirm_until = 0;
     switch (key) {
     case SW_BTN_B:
     case SW_BTN_MENU:
@@ -1010,35 +969,6 @@ static void on_key(SDLKey key)
             do_search();
         else if (t->count)
             play(&t->items[t->sel]);
-        break;
-    case SW_BTN_X:
-        if (t->count && t->sel >= 0 && cur != T_SAVED)
-            download(&t->items[t->sel]);
-        break;
-    case SW_BTN_Y:
-        if (cur == T_SAVED && t->count) {
-            if (SDL_GetTicks() < confirm_until) {
-                confirm_until = 0;
-                delete_saved(&t->items[t->sel]);
-            }
-            else {
-                confirm_until = SDL_GetTicks() + 3000;
-                show_message("Trykk Y igjen for å slette", 3000);
-            }
-        }
-        break;
-    case SW_BTN_SELECT:
-        if (cur == T_SAVED || inst_count < 1)
-            break;
-        inst_cur = (inst_cur + 1) % inst_count;
-        save_instance();
-        {
-            char m[200];
-            snprintf(m, sizeof(m), "Server: %s", instances[inst_cur] + 8);
-            show_message(m, 2500);
-        }
-        if (cur == T_POPULAR)
-            load_popular();
         break;
     default:
         break;
