@@ -67,6 +67,24 @@ SDL_Surface *theme_batterySurfaceWithBg(int percentage, SDL_Surface *background)
         img_width = icon->w > text->w ? icon->w : text->w;
     }
 
+    // MainUI (the only caller with a background) centres this image on a
+    // 48 px box at x 572-620 and draws the WiFi icon in the box to its left.
+    // Icon + text side by side is wider than that box, and centring it pushed
+    // the battery icon over the WiFi icon. Put the icon and text against the
+    // right screen edge instead, so they only take space right of the box.
+    bool mainui_edge = background != NULL && visible && !style->fixed &&
+                       style->textAlign != CENTER;
+    int edge_x = 0;
+    if (mainui_edge) {
+        const int box_center = 596, right_edge = 634;
+        int content_w = icon->w + SPACER + text->w;
+        int half = right_edge - box_center;
+        if (content_w - half > half)
+            half = content_w - half;
+        img_width = 2 * half;
+        edge_x = half + (right_edge - box_center) - content_w;
+    }
+
     if (img_width % 2 != 0)
         img_width += 1;
     if (img_height % 2 != 0)
@@ -110,6 +128,16 @@ SDL_Surface *theme_batterySurfaceWithBg(int percentage, SDL_Surface *background)
             default:
                 rect_text.x = icon->w + SPACER + style->offsetX;
                 break;
+            }
+        }
+        if (mainui_edge) {
+            if (style->textAlign == RIGHT) {
+                rect_text.x = edge_x + style->offsetX;
+                rect_icon.x = edge_x + text->w + SPACER;
+            }
+            else {
+                rect_icon.x = edge_x;
+                rect_text.x = edge_x + icon->w + SPACER + style->offsetX;
             }
         }
     }
