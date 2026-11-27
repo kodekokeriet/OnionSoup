@@ -1125,18 +1125,28 @@ int main(void)
         open_tab(T_POPULAR);
     remove("/tmp/youtube_state");
 
+    // Redraw at once after input, otherwise ~8 times a second: a full redraw
+    // every frame keeps the CPU busy and slows down background downloads
+    Uint32 last_draw = 0;
     while (!quit) {
+        bool dirty = spos != NULL;
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT)
                 quit = true;
-            else if (ev.type == SDL_KEYDOWN && !spos)
+            else if (ev.type == SDL_KEYDOWN && !spos) {
                 on_key(ev.key.keysym.sym);
+                dirty = true;
+            }
         }
         script_step();
         poll_thumbs();
-        draw();
-        SDL_Delay(30);
+        Uint32 now = SDL_GetTicks();
+        if (dirty || now - last_draw >= 120) {
+            draw();
+            last_draw = now;
+        }
+        SDL_Delay(20);
     }
 
     int code = access("/tmp/youtube_play", F_OK) == 0 ? EXIT_PLAY : 0;

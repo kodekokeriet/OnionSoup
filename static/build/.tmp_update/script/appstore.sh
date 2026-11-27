@@ -108,7 +108,7 @@ merge_sources() {
 			*) continue ;;
 		esac
 		echo -n "Source $url... "
-		if curl -k -s -L -f -o "$catalog.src" "$url" && jq -e '.apps | arrays' "$catalog.src" > /dev/null 2>&1 &&
+		if curl -k -s -L -f --connect-timeout 5 --max-time 30 -o "$catalog.src" "$url" && jq -e '.apps | arrays' "$catalog.src" > /dev/null 2>&1 &&
 			jq -s --arg src "$url" '.[0].apps += [.[1].apps[] | select(type == "object" and (.id | type) == "string") | . + {source_catalog: $src}]
 				| .[0].apps |= (reduce .[] as $a ([]; if any(.[]; .id == $a.id) then . else . + [$a] end)) | .[0]' \
 				"$catalog" "$catalog.src" > "$catalog.tmp"; then
@@ -124,7 +124,7 @@ merge_sources() {
 fetch_catalog() {
 	mkdir -p "$workdir"
 	echo -n "Fetching app catalog... "
-	if curl -k -s -L -f -o "$catalog.tmp" "$CATALOG_URL" && jq -e '.apps' "$catalog.tmp" > /dev/null 2>&1; then
+	if curl -k -s -L -f --connect-timeout 5 --max-time 30 -o "$catalog.tmp" "$CATALOG_URL" && jq -e '.apps' "$catalog.tmp" > /dev/null 2>&1; then
 		mv "$catalog.tmp" "$catalog"
 		echo -e "${GREEN}OK${NC}"
 		merge_sources
@@ -654,7 +654,10 @@ run_command() {
 		fetch)
 			status "fetch 0 Connecting"
 			prepare_network
-			fetch_catalog > /dev/null
+			# A catalog fetched in the last 30 minutes is still fresh: open at once
+			if [ -z "$(find "$catalog" -mmin -30 2> /dev/null)" ]; then
+				fetch_catalog > /dev/null
+			fi
 			status "done 100 Ready"
 			;;
 		install)
