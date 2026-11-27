@@ -1,8 +1,10 @@
 {
     "name": "YouTube",
-    "description": "Watch YouTube on the Miyoo: popular videos, search, history and downloads to watch offline. Goes through Invidious, so no account needed. Videos play in 360p.",
-    "version": "0.1.2",
+    "description": "Watch YouTube on the Miyoo: popular videos, search and history. Uses Invidious and Piped servers, so no account is needed. Videos play in 360p.",
+    "version": "0.2.0",
     "author": "Onion Soup",
     "category": "Media",
-    "devices": ["354"]
+    "devices": [
+        "354"
+    ]
 }
