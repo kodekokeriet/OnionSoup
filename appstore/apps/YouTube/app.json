@@ -2,7 +2,7 @@
     "name": "YouTube",
     "description": "Watch YouTube on the Miyoo: popular videos, search and history. Uses Invidious and Piped servers, so no account is needed. Videos play in 360p.",
     "version": "0.2.0",
-    "author": "OnionSoup",
+    "author": "Onion Soup",
     "category": "Media",
     "devices": [
         "354"

@@ -115,7 +115,7 @@ actual_uptime() {
 
 system_healthcheck() {
     log "Generating system healthcheck"
-    write_info "Onion version:" "cat $sysdir/onionVersion/version.txt" $sysinfo_file
+    write_info "Onion Soup version:" "cat $sysdir/onionVersion/version.txt" $sysinfo_file
     write_info "Firmware version:" "/etc/fw_printenv miyoo_version" $sysinfo_file
     write_info "Device model:" "cat /tmp/deviceModel" $sysinfo_file
     write_info "Charging/battery state:" "/customer/app/axp_test" $sysinfo_file
