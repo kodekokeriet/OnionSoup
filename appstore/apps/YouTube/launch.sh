@@ -40,6 +40,8 @@ while :; do
 	else
 		"$appdir/jfplayer" /tmp/youtube_play
 	fi
+	# back to normal clocking while browsing (battery)
+	echo ondemand > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 	rm -f /tmp/youtube_play /tmp/jellyfin_result
 done
 rm -f /tmp/stay_awake

@@ -25,6 +25,8 @@ while :; do
 		headers="Authorization: $(sed -n 's/^auth=//p' /tmp/jellyfin_play)$cr$nl"
 		./bin/ffplay -autoexit -vf "hflip,vflip" -headers "$headers" -i "$url"
 	fi
+	# back to normal clocking while browsing (battery)
+	echo ondemand > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
 	rm -f /tmp/jellyfin_play
 done
 rm -f /tmp/stay_awake

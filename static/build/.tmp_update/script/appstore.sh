@@ -63,6 +63,7 @@ enable_wifi() {
 	IP=$(ip route get 1 2> /dev/null | awk '{print $NF;exit}')
 	if [ "$IP" = "" ]; then
 		echo "Wifi is disabled - trying to enable it..."
+		touch /tmp/appstore_wifi_on # the store turns it off again on exit
 		insmod $SDCARD/8188fu.ko
 		ifconfig lo up
 		/customer/app/axp_test wifion
