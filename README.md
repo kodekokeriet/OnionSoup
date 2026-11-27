@@ -2,7 +2,7 @@
 
 # Onion Soup
 
-*A new fork of [Onion](https://github.com/OnionUI/Onion) for the Miyoo Mini and Mini+. Onion Soup picks up where Onion left off and adds a set of quality of life upgrades on top of it: an App Store and a Game Store, native media apps, a tidier Apps tab, a new default theme and a number of fixes.*
+*A new fork of [Onion](https://github.com/OnionUI/Onion) for the Miyoo Mini and Mini+. Onion Soup picks up where Onion left off and adds a spicy life back into your Miyoo, with a set of quality of life upgrades on top of it: an App Store and a Game Store, native media apps, a tidier Apps tab, a new default theme and a number of fixes.*
 
 <p>&nbsp;</p>
 
