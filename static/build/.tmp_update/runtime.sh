@@ -211,8 +211,8 @@ launch_main_ui() {
     # Apps tab: hide grouped apps, show the groups and sort the tab
     sh $sysdir/script/app_groups.sh sync --order
 
-    # Game list: shrink new box art so it doesn't cover the game names
-    (nice -n 19 sh $sysdir/script/boxart_fit.sh > /dev/null 2>&1 &)
+    # Remove the old box art shrinking app and give back the original images
+    [ -d /mnt/SDCARD/App/BoxartFit ] && sh $sysdir/script/migration/00021_remove_boxartfit.sh
 
     # Ensure we've mounted the correct MainUI binary
     mount_main_ui
