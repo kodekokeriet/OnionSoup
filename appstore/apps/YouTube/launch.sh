@@ -6,6 +6,7 @@
 appdir=$(cd "$(dirname "$0")" && pwd)
 sysdir=/mnt/SDCARD/.tmp_update
 cache=/mnt/SDCARD/YouTube/.cache
+log=/mnt/SDCARD/YouTube/youtube.log
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$sysdir/lib:$sysdir/lib/parasyte"
 export PATH="$sysdir/bin:$PATH"
 export YT_DIR="$appdir"
@@ -24,16 +25,18 @@ while :; do
 		: > "$cache/video.mp4"
 		touch "$cache/loading"
 		(
-			curl -s -k -L -f --retry 2 -o "$cache/video.mp4" "$url" &
+			curl -s -S -k -L -f --retry 2 -A "Mozilla/5.0 OnionSoup" -o "$cache/video.mp4" "$url" 2>> "$log" &
 			echo $! > "$cache/pid"
 			wait $!
+			echo "curl exit $? ($(wc -c < "$cache/video.mp4") bytes)" >> "$log"
 			rm -f "$cache/loading"
 		) &
 		{ grep -v '^stream=' /tmp/youtube_play; echo "url=$cache/video.mp4"; echo "local=1"; echo "grow=$cache/loading"; } > /tmp/youtube_jfp
-		"$appdir/jfplayer" /tmp/youtube_jfp
+		JFP_DEBUG=1 "$appdir/jfplayer" /tmp/youtube_jfp 2>> "$log"
 		[ -f "$cache/pid" ] && kill "$(cat "$cache/pid")" 2> /dev/null
 		sleep 1
 		rm -rf "$cache" /tmp/youtube_jfp
+		tail -n 200 "$log" > "$log.tmp" && mv "$log.tmp" "$log"
 	else
 		"$appdir/jfplayer" /tmp/youtube_play
 	fi

@@ -552,9 +552,91 @@ static int saved_state(const char *id) // 0 no, 1 downloading, 2 done
     return access(p, F_OK) == 0 ? 1 : 0;
 }
 
-static void stream_url(const char *id, char *out, size_t n)
+static void yt_log(const char *fmt, ...)
 {
-    snprintf(out, n, "%s/latest_version?id=%s&itag=18&local=true", instances[inst_cur], id);
+    char path[400];
+    snprintf(path, sizeof(path), "%s/youtube.log", save_dir);
+    FILE *f = fopen(path, "a");
+    if (!f)
+        return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(f, fmt, ap);
+    va_end(ap);
+    fputc('\n', f);
+    fclose(f);
+}
+
+// Does the URL deliver video data? Fetches the first 2 KB.
+static bool probe(const char *url)
+{
+    pid_t pid = fork();
+    if (pid == 0) {
+        int dn = open("/dev/null", O_RDWR);
+        dup2(dn, 1);
+        dup2(dn, 2);
+        execlp(curl_bin, curl_bin, "-s", "-k", "-L", "-f", "-m", "15", "-r", "0-2047", "-A", "Mozilla/5.0 OnionSoup",
+               "-o", "/dev/null", url, (char *)NULL);
+        _exit(127);
+    }
+    int st = 0;
+    if (pid > 0)
+        waitpid(pid, &st, 0);
+    return pid > 0 && WIFEXITED(st) && WEXITSTATUS(st) == 0;
+}
+
+// Find a playable MP4 URL (360p, itag 18) on one of the servers. Servers
+// often answer search but cannot play (YouTube blocks them), so every
+// candidate is tested before it is used.
+static bool resolve_stream(const char *id, char *out, size_t n)
+{
+    busy("Finner videoen …");
+    for (int k = 0; k < inst_count; k++) {
+        int i = (inst_cur + k) % inst_count;
+        const char *base = instances[i];
+        char url[1600], path[400];
+        snprintf(path, sizeof(path), "%s/api/v1/videos/%s?local=true&fields=formatStreams", base, id);
+        char *res = http_get(path, 15);
+        cJSON *j = res ? cJSON_Parse(res) : NULL;
+        free(res);
+        cJSON *fs = cJSON_GetObjectItem(j, "formatStreams"), *o, *pick = NULL;
+        cJSON_ArrayForEach(o, fs)
+        {
+            cJSON *itag = cJSON_GetObjectItem(o, "itag");
+            bool is18 = (cJSON_IsString(itag) && !strcmp(itag->valuestring, "18")) ||
+                        (cJSON_IsNumber(itag) && itag->valueint == 18);
+            if (is18 || (!pick && strstr(jstr(o, "type"), "mp4")))
+                pick = o;
+            if (is18)
+                break;
+        }
+        const char *u = pick ? jstr(pick, "url") : "";
+        bool ok = false;
+        if (*u) {
+            snprintf(url, sizeof(url), "%s%s", *u == '/' ? base : "", u);
+            ok = probe(url);
+            yt_log("%s: api url %s", base, ok ? "ok" : "failed");
+        }
+        else
+            yt_log("%s: no formatStreams", base);
+        cJSON_Delete(j);
+        if (!ok) {
+            snprintf(url, sizeof(url), "%s/latest_version?id=%s&itag=18&local=true", base, id);
+            ok = probe(url);
+            yt_log("%s: latest_version %s", base, ok ? "ok" : "failed");
+        }
+        if (ok) {
+            if (i != inst_cur) {
+                inst_cur = i;
+                save_instance();
+            }
+            copy_str(out, n, url);
+            message_until = 0;
+            return true;
+        }
+    }
+    show_message("Ingen server kunne spille videoen. Prøv igjen senere.", 4000);
+    return false;
 }
 
 static void download(Video *v)
@@ -563,11 +645,12 @@ static void download(Video *v)
         show_message(saved_state(v->id) == 2 ? "Allerede lagret" : "Lastes allerede ned", 2000);
         return;
     }
-    char meta[400], part[400], done[400], url[400];
+    char meta[400], part[400], done[400], url[1600];
     saved_path(v->id, ".txt", meta, sizeof(meta));
     saved_path(v->id, ".mp4.part", part, sizeof(part));
     saved_path(v->id, ".mp4", done, sizeof(done));
-    stream_url(v->id, url, sizeof(url));
+    if (!resolve_stream(v->id, url, sizeof(url)))
+        return;
     FILE *f = fopen(meta, "w");
     if (!f) {
         show_message("Kunne ikke lagre på minnekortet", 3000);
@@ -750,21 +833,21 @@ static bool restore_state(void)
 
 static void play(Video *v)
 {
+    char p[400], url[1600] = "";
+    saved_path(v->id, ".mp4", p, sizeof(p));
+    bool local = access(p, R_OK) == 0;
+    if (!local && !resolve_stream(v->id, url, sizeof(url)))
+        return;
     FILE *f = fopen("/tmp/youtube_play", "w");
     if (!f) {
         show_message("Kunne ikke starte avspilling", 3000);
         return;
     }
     fprintf(f, "title=%s\nduration=%ld\n", v->title, v->length);
-    char p[400];
-    saved_path(v->id, ".mp4", p, sizeof(p));
-    if (access(p, R_OK) == 0)
+    if (local)
         fprintf(f, "url=%s\nlocal=1\n", p);
-    else {
-        char url[400];
-        stream_url(v->id, url, sizeof(url));
+    else
         fprintf(f, "stream=%s\n", url);
-    }
     fclose(f);
     add_history(v);
     save_state();

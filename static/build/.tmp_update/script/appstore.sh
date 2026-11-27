@@ -503,9 +503,24 @@ install_app() {
 		die "The app package has no config.json."
 	fi
 
-	rm -rf "$appdir/$id"
 	mkdir -p "$appdir"
+	old="$appdir/.old-$id"
+	rm -rf "$old"
+	[ -d "$appdir/$id" ] && mv "$appdir/$id" "$old"
 	mv "$tmp" "$appdir/$id"
+	# Remember which files came with the package, so the next update knows what the user made
+	(cd "$appdir/$id" && find . -type f) > "$appdir/$id/.appstore_files"
+	if [ -d "$old" ]; then
+		# Update: keep the user's own files (samples, projects, settings)
+		(cd "$old" && find . -type f ! -name .appstore_files ! -name .appstore_version ! -name 'config*.json') |
+			while read -r f; do
+				[ -e "$appdir/$id/$f" ] && continue
+				[ -f "$old/.appstore_files" ] && grep -qxF "$f" "$old/.appstore_files" && continue
+				mkdir -p "$appdir/$id/${f%/*}"
+				mv "$old/$f" "$appdir/$id/$f"
+			done
+		rm -rf "$old"
+	fi
 	find "$appdir/$id" -name "*.sh" -exec chmod +x {} \;
 	echo -n "$version" > "$appdir/$id/.appstore_version"
 	rm -f "$zip"
