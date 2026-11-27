@@ -1466,7 +1466,9 @@ int main(int argc, char *argv[])
     // Redraw right away after input or finished work, otherwise only a few
     // times a second: a full redraw every frame keeps the CPU busy and slows
     // down downloads and installs running in the background
-    Uint32 last_draw = 0;
+    // After a few seconds without input: one redraw a second and longer
+    // sleeps, so the CPU can clock down (battery)
+    Uint32 last_draw = 0, last_input = 0;
     while (!quit) {
         bool dirty = false;
         SDL_Event e;
@@ -1489,11 +1491,14 @@ int main(int argc, char *argv[])
         if (poll_image_job())
             dirty = true;
         Uint32 now = SDL_GetTicks();
-        if (dirty || now - last_draw >= 200) {
+        if (dirty)
+            last_input = now;
+        bool idle = now - last_input > 3000 && !(job_pid > 0 || img_pid > 0);
+        if (dirty || now - last_draw >= (idle ? 1000 : 200)) {
             draw();
             last_draw = now;
         }
-        SDL_Delay(20);
+        SDL_Delay(idle ? 50 : 20);
     }
 
 done:

@@ -1127,7 +1127,9 @@ int main(void)
 
     // Redraw at once after input, otherwise ~8 times a second: a full redraw
     // every frame keeps the CPU busy and slows down background downloads
-    Uint32 last_draw = 0;
+    // After a few seconds without input: one redraw a second and longer
+    // sleeps, so the CPU can clock down (battery)
+    Uint32 last_draw = 0, last_input = 0;
     while (!quit) {
         bool dirty = spos != NULL;
         SDL_Event ev;
@@ -1142,11 +1144,14 @@ int main(void)
         script_step();
         poll_thumbs();
         Uint32 now = SDL_GetTicks();
-        if (dirty || now - last_draw >= 120) {
+        if (dirty)
+            last_input = now;
+        bool idle = now - last_input > 3000 && !(img_pid > 0);
+        if (dirty || now - last_draw >= (idle ? 1000 : 120)) {
             draw();
             last_draw = now;
         }
-        SDL_Delay(20);
+        SDL_Delay(idle ? 50 : 20);
     }
 
     int code = access("/tmp/youtube_play", F_OK) == 0 ? EXIT_PLAY : 0;
