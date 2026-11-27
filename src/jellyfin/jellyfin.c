@@ -148,7 +148,7 @@ static int quality = 1; // index into qualities[]
 static const struct {
     const char *name;
     int bitrate, max_w, max_h;
-} qualities[] = {{"Lav (360p)", 500000, 480, 360}, {"Middels (480p)", 1000000, 640, 480}, {"Høy (480p)", 1600000, 640, 480}};
+} qualities[] = {{"Low (360p)", 500000, 480, 360}, {"Medium (480p)", 1000000, 640, 480}, {"High (480p)", 1600000, 640, 480}};
 static bool offline = false;
 static char dl_dir[300];
 static Screen prev_scr = S_HOME; // where settings return to
@@ -550,7 +550,7 @@ static void quick_connect_start(void)
     token[0] = '\0';
     cJSON *j = api_json("POST", "/QuickConnect/Initiate", NULL);
     if (!j) {
-        copy_str(login_error, sizeof(login_error), "Quick Connect er slått av på serveren. Trykk Y for passord.");
+        copy_str(login_error, sizeof(login_error), "Quick Connect is off on the server. Press Y for password.");
         return;
     }
     copy_str(qc_secret, sizeof(qc_secret), jstr(j, "Secret"));
@@ -586,11 +586,11 @@ static void quick_connect_poll(void)
 static void password_login(void)
 {
     char user[96], pass[128];
-    copy_str(user, sizeof(user), launch_keyboard(user_name, "Brukernavn"));
+    copy_str(user, sizeof(user), launch_keyboard(user_name, "Username"));
     trim(user);
     if (!*user)
         return;
-    copy_str(pass, sizeof(pass), launch_keyboard("", "Passord"));
+    copy_str(pass, sizeof(pass), launch_keyboard("", "Password"));
     // Only the password is not trimmed of inner spaces; strip a stray newline.
     size_t pl = strlen(pass);
     while (pl && (pass[pl - 1] == '\n' || pass[pl - 1] == '\r'))
@@ -607,11 +607,11 @@ static void password_login(void)
     if (ok)
         load_views();
     else if (last_http == 401)
-        copy_str(login_error, sizeof(login_error), "Feil brukernavn eller passord.");
+        copy_str(login_error, sizeof(login_error), "Wrong username or password.");
     else if (last_http == 0)
-        copy_str(login_error, sizeof(login_error), "Fikk ikke kontakt med serveren.");
+        copy_str(login_error, sizeof(login_error), "Could not reach the server.");
     else
-        snprintf(login_error, sizeof(login_error), "Serveren svarte med feil %d.", last_http);
+        snprintf(login_error, sizeof(login_error), "The server replied with error %d.", last_http);
 }
 
 static void choose_server(const char *address)
@@ -632,7 +632,7 @@ static void choose_server(const char *address)
     server_name[0] = '\0';
     if (!check_server()) {
         copy_str(server_url, sizeof(server_url), old_url);
-        show_message("Fant ingen Jellyfin-server på den adressen", 3500);
+        show_message("No Jellyfin server found at that address", 3500);
         return;
     }
     // the same server again, or a new one in the list
@@ -736,7 +736,7 @@ static bool push_level(const char *parent_id, const char *title, const char *col
              user_id, parent_id, MAX_ITEMS, filter);
     cJSON *j = api_json("GET", path, NULL);
     if (!j) {
-        show_message("Kunne ikke hente fra serveren", 3000);
+        show_message("Could not load from the server", 3000);
         return false;
     }
     Level *lv = &stack[depth];
@@ -791,14 +791,14 @@ static void open_view(int idx)
 
 static int dl_count_done(void);
 
-// Add the "Nedlastet" tab when something has been downloaded
+// Add the "Downloaded" tab when something has been downloaded
 static void add_downloads_view(void)
 {
     if (view_count >= 8 || dl_count_done() == 0)
         return;
     View *v = &views[view_count++];
     copy_str(v->id, sizeof(v->id), "local:");
-    copy_str(v->name, sizeof(v->name), "Nedlastet");
+    copy_str(v->name, sizeof(v->name), "Downloaded");
     copy_str(v->collection, sizeof(v->collection), "downloads");
 }
 
@@ -1171,16 +1171,16 @@ static int dl_state(const char *id, int *pct)
     return e->state;
 }
 
-// Short download status for a card or row: "Lagret", "42%" or "Kø"
+// Short download status for a card or row: "Saved", "42%" or "Queued"
 static bool dl_badge(const char *id, char *out, size_t n)
 {
     int pct = 0, st = dl_state(id, &pct);
     if (st == 3)
-        snprintf(out, n, "Lagret");
+        snprintf(out, n, "Saved");
     else if (st == 2)
         snprintf(out, n, "%d%%", pct);
     else if (st == 1)
-        snprintf(out, n, "Kø");
+        snprintf(out, n, "Queued");
     return st != 0;
 }
 
@@ -1314,15 +1314,15 @@ static void dl_queue_selection(Item *it)
         dl_scan(true);
         char m[80];
         if (n == 1)
-            snprintf(m, sizeof(m), "Lastes ned: %s", it->name);
+            snprintf(m, sizeof(m), "Downloading: %s", it->name);
         else
-            snprintf(m, sizeof(m), "%d filer lagt i nedlastingskøen", n);
+            snprintf(m, sizeof(m), "%d files added to the download queue", n);
         show_message(m, 2500);
     }
     else if (have)
-        show_message("Allerede lastet ned", 2500);
+        show_message("Already downloaded", 2500);
     else
-        show_message("Dette kan ikke lastes ned", 2500);
+        show_message("This can't be downloaded", 2500);
 }
 
 static void dl_remove_files(const char *id)
@@ -1382,7 +1382,7 @@ static void dl_delete_all(void)
     char cmd[700];
     snprintf(cmd, sizeof(cmd), "rm -rf '%s'", dl_dir);
     if (system(cmd) != 0)
-        show_message("Kunne ikke slette alt", 2500);
+        show_message("Could not delete everything", 2500);
     dl_scan(true);
 }
 
@@ -1539,7 +1539,7 @@ static void play_video(Item *it, long start_s)
     if (*it->local) {
         FILE *fp = fopen("/tmp/jellyfin_play", "w");
         if (!fp) {
-            show_message("Kunne ikke starte avspilling", 3000);
+            show_message("Could not start playback", 3000);
             return;
         }
         fprintf(fp, "url=%s\nlocal=1\ntitle=%s\nduration=%ld\nstart=%ld\n", it->local, it->name, it->runtime_ticks,
@@ -1554,7 +1554,7 @@ static void play_video(Item *it, long start_s)
     }
     FILE *fp = fopen("/tmp/jellyfin_play", "w");
     if (!fp) {
-        show_message("Kunne ikke starte avspilling", 3000);
+        show_message("Could not start playback", 3000);
         return;
     }
     char val[360];
@@ -1666,57 +1666,57 @@ static void draw_hint_bar(void)
     int n = 0;
 #define HINT(a, b) (k[n] = (a), l[n] = (b), n++)
     if (scr == S_DISCOVER) {
-        HINT("A", "Velg");
-        HINT("Y", "Søk igjen");
-        HINT("B", account_count > 0 ? "Tilbake" : "Avslutt");
+        HINT("A", "Select");
+        HINT("Y", "Search again");
+        HINT("B", account_count > 0 ? "Back" : "Exit");
     }
     else if (scr == S_LOGIN) {
-        HINT("Y", "Passord");
-        HINT("X", "Ny kode");
-        HINT("B", "Tilbake");
-        HINT("SELECT", "Innstillinger");
+        HINT("Y", "Password");
+        HINT("X", "New code");
+        HINT("B", "Back");
+        HINT("SELECT", "Settings");
     }
     else if (scr == S_SETTINGS) {
         if (settings_sel == SET_QUALITY)
-            HINT("←→", "Endre");
+            HINT("←→", "Change");
         else if (settings_sel != SET_ABOUT && settings_sel != SET_USER)
-            HINT("A", "Velg");
+            HINT("A", "Select");
         else if (settings_sel == SET_USER && !offline)
-            HINT("A", *token ? "Logg ut" : "Logg inn");
-        HINT("B", "Tilbake");
+            HINT("A", *token ? "Logg ut" : "Log in");
+        HINT("B", "Back");
     }
     else if (scr == S_SERVERS) {
-        HINT("A", servers_sel < account_count ? "Bruk" : "Legg til");
+        HINT("A", servers_sel < account_count ? "Use" : "Add");
         if (servers_sel < account_count)
-            HINT("Y", "Fjern");
-        HINT("B", "Tilbake");
+            HINT("Y", "Remove");
+        HINT("B", "Back");
     }
     else if (scr == S_DETAIL) {
         bool resume = detail_item && detail_item->resume_s > 30 && !*detail_item->local;
-        HINT("A", resume ? "Fortsett" : "Spill av");
+        HINT("A", resume ? "Resume" : "Play");
         if (resume)
-            HINT("Y", "Fra start");
+            HINT("Y", "From start");
         if (*detail_item->local)
-            HINT("Y", "Slett");
+            HINT("Y", "Delete");
         else if (can_download(detail_item) && !dl_state(detail_item->id, NULL))
-            HINT("X", "Last ned");
-        HINT("B", "Tilbake");
-        HINT("SELECT", "Meny");
+            HINT("X", "Download");
+        HINT("B", "Back");
+        HINT("SELECT", "Menu");
     }
     else {
         Level *lv = depth ? &stack[depth - 1] : NULL;
         Item *it = lv && lv->count ? &lv->items[lv->sel] : NULL;
-        HINT("A", lv && lv->list_mode && lv->count && !strcmp(lv->items[0].type, "Audio") ? "Spill" : "Åpne");
-        HINT("B", depth > 1 ? "Tilbake" : "Avslutt");
+        HINT("A", lv && lv->list_mode && lv->count && !strcmp(lv->items[0].type, "Audio") ? "Play" : "Open");
+        HINT("B", depth > 1 ? "Back" : "Exit");
         if (depth == 1 && view_count > 1)
-            HINT("L/R", "Bibliotek");
+            HINT("L/R", "Library");
         if (music_pid > 0)
-            HINT("Y", "Stopp musikk");
+            HINT("Y", "Stop music");
         else if (it && lv && level_is_local(lv))
-            HINT("Y", "Slett");
+            HINT("Y", "Delete");
         else if (it && can_download(it))
-            HINT("X", "Last ned");
-        HINT("SELECT", "Meny");
+            HINT("X", "Download");
+        HINT("SELECT", "Menu");
     }
     draw_hints(k, l, n);
 #undef HINT
@@ -1776,7 +1776,7 @@ static void draw_now_playing(void)
         return;
     fill(0, BOTTOM_Y - 40, SCREEN_W, 40, C_PANEL);
     fill(0, BOTTOM_Y - 40, 4, 40, C_ACCENT);
-    text(f13, music_paused ? "PAUSE" : "SPILLER", 16, BOTTOM_Y - 33, C_ACCENT);
+    text(f13, music_paused ? "PAUSE" : "PLAYING", 16, BOTTOM_Y - 33, C_ACCENT);
     char line[300];
     snprintf(line, sizeof(line), "%s  ·  %s", music_title, music_artist);
     text_fit(f15, line, 90, BOTTOM_Y - 32, SCREEN_W - 210, C_WHITE);
@@ -1792,8 +1792,8 @@ static void draw_center_text(const char *big, const char *small, SDL_Color c)
 
 static void draw_discover(void)
 {
-    text(f24, "Velg server", 24, TOP_H + 16, C_WHITE);
-    const char *sub = disc_sock >= 0 ? "Søker etter Jellyfin på nettverket …" : "Servere på nettverket ditt:";
+    text(f24, "Choose server", 24, TOP_H + 16, C_WHITE);
+    const char *sub = disc_sock >= 0 ? "Looking for Jellyfin on the network …" : "Servers on your network:";
     text(f15, sub, 24, TOP_H + 50, C_GREY);
     int rows = server_count + 1;
     for (int i = 0; i < rows; i++) {
@@ -1807,18 +1807,18 @@ static void draw_discover(void)
             text_fit(f13, servers[i].address, 44, y + 29, SCREEN_W - 100, C_GREY);
         }
         else {
-            text(f19, "Skriv inn adresse …", 44, y + 13, s ? C_ACCENT : C_SOFT);
+            text(f19, "Enter address …", 44, y + 13, s ? C_ACCENT : C_SOFT);
         }
     }
     if (server_count == 0 && disc_sock < 0)
-        text_wrap(f15, "Fant ingen servere. Sjekk at Miyoo-en er på samme WiFi som serveren, eller skriv inn adressen.", 24,
+        text_wrap(f15, "No servers found. Check that the Miyoo is on the same WiFi as the server, or enter the address.", 24,
                   TOP_H + 160, SCREEN_W - 48, 21, 3, C_GREY);
 }
 
 static void draw_login(void)
 {
     if (*qc_code) {
-        text(f19, "Logg inn med Quick Connect", 24, TOP_H + 18, C_WHITE);
+        text(f19, "Log in with Quick Connect", 24, TOP_H + 18, C_WHITE);
         // big code, grouped 3+3
         char code[16];
         snprintf(code, sizeof(code), "%.3s %.3s", qc_code, qc_code + 3);
@@ -1829,14 +1829,14 @@ static void draw_login(void)
         int cw = text_w(f, code);
         fill_round((SCREEN_W - cw) / 2 - 30, TOP_H + 60, cw + 60, 100, 20, C_PANEL);
         text(f, code, (SCREEN_W - cw) / 2, TOP_H + 110 - TTF_FontHeight(f) / 2, C_ACCENT);
-        static const char *steps[] = {"1. Åpne Jellyfin på mobilen eller PC-en",
-                                      "2. Gå til profilen din og velg «Quick Connect»",
-                                      "3. Skriv inn koden over"};
+        static const char *steps[] = {"1. Open Jellyfin on your phone or PC",
+                                      "2. Go to your profile and choose \"Quick Connect\"",
+                                      "3. Enter the code above"};
         for (int i = 0; i < 3; i++)
             text(f17, steps[i], 60, TOP_H + 186 + i * 30, C_SOFT);
         Uint32 t2 = SDL_GetTicks() / 400 % 4;
         char wait[40];
-        snprintf(wait, sizeof(wait), "Venter på godkjenning%.*s", (int)t2, "...");
+        snprintf(wait, sizeof(wait), "Waiting for approval%.*s", (int)t2, "...");
         if (*login_error)
             text_fit(f15, login_error, 60, TOP_H + 290, SCREEN_W - 120, C_RED);
         else
@@ -1844,7 +1844,7 @@ static void draw_login(void)
         text_fit(f13, server_url, 60, TOP_H + 316, SCREEN_W - 120, C_GREY);
     }
     else {
-        draw_center_text("Logg inn", *login_error ? login_error : "Trykk Y for å logge inn med brukernavn og passord.",
+        draw_center_text("Log in", *login_error ? login_error : "Press Y to log in with username and password.",
                          C_WHITE);
     }
 }
@@ -1900,7 +1900,7 @@ static void draw_grid(Level *lv)
 static void format_duration(long s, char *out, size_t n)
 {
     if (s >= 3600)
-        snprintf(out, n, "%ld t %ld min", s / 3600, (s % 3600) / 60);
+        snprintf(out, n, "%ld h %ld min", s / 3600, (s % 3600) / 60);
     else
         snprintf(out, n, "%ld:%02ld", s / 60, s % 60);
 }
@@ -1942,7 +1942,7 @@ static void draw_list(Level *lv)
 static void draw_home(void)
 {
     if (depth == 0) {
-        draw_center_text("Ingen bibliotek", "Serveren har ingen bibliotek du har tilgang til.", C_WHITE);
+        draw_center_text("No libraries", "The server has no libraries you can access.", C_WHITE);
         return;
     }
     Level *lv = &stack[depth - 1];
@@ -1951,7 +1951,7 @@ static void draw_home(void)
     snprintf(count, sizeof(count), "%d", lv->count);
     text(f15, count, SCREEN_W - 24 - text_w(f15, count), TOP_H + 12, C_GREY);
     if (lv->count == 0) {
-        draw_center_text("Tomt", "Ingenting her ennå.", C_GREY);
+        draw_center_text("Empty", "Nothing here yet.", C_GREY);
         return;
     }
     if (lv->sel >= lv->count)
@@ -1980,15 +1980,15 @@ static void draw_detail(void)
     snprintf(meta, sizeof(meta), "%s%s%s", it->sub, *it->sub && *dur ? "  ·  " : "", dur);
     text_fit(f15, meta, x, y + 2, w, C_GREY);
     y += 34;
-    y = text_wrap(f15, *it->overview ? it->overview : "Ingen beskrivelse.", x, y, w, 21, 6, C_SOFT);
+    y = text_wrap(f15, *it->overview ? it->overview : "No description.", x, y, w, 21, 6, C_SOFT);
     int by = TOP_H + 222;
-    char label[48] = "Spill av";
+    char label[48] = "Play";
     if (it->resume_s > 30) {
         long r = it->resume_s;
         if (r >= 3600)
-            snprintf(label, sizeof(label), "Fortsett fra %ld:%02ld:%02ld", r / 3600, r / 60 % 60, r % 60);
+            snprintf(label, sizeof(label), "Resume from %ld:%02ld:%02ld", r / 3600, r / 60 % 60, r % 60);
         else
-            snprintf(label, sizeof(label), "Fortsett fra %ld:%02ld", r / 60, r % 60);
+            snprintf(label, sizeof(label), "Resume from %ld:%02ld", r / 60, r % 60);
     }
     int lw = text_w(f19, label) + 40;
     fill_round(x, by, lw, 36, 18, C_ACCENT);
@@ -2001,17 +2001,17 @@ static void draw_detail(void)
             fill_round(x + 18, by + 42, fw > pw ? pw : fw, 4, 2, C_ACCENT);
     }
     else if (it->played)
-        text(f15, "Sett", x + lw + 16, by + 9, C_GREEN);
+        text(f15, "Watched", x + lw + 16, by + 9, C_GREEN);
     char status[160];
     int pct = 0, st = *it->local ? 3 : dl_state(it->id, &pct);
     if (st == 3)
-        snprintf(status, sizeof(status), "Lagret på minnekortet%s", offline ? "" : ". Spilles av fra kortet.");
+        snprintf(status, sizeof(status), "Saved on the SD card%s", offline ? "" : ". Plays from the card.");
     else if (st == 2)
-        snprintf(status, sizeof(status), "Lastes ned … %d%%", pct);
+        snprintf(status, sizeof(status), "Downloading … %d%%", pct);
     else if (st == 1)
-        snprintf(status, sizeof(status), "Venter i nedlastingskøen");
+        snprintf(status, sizeof(status), "Waiting in the download queue");
     else
-        snprintf(status, sizeof(status), "Video omkodes av serveren til %s for Miyoo.", qualities[quality].name);
+        snprintf(status, sizeof(status), "The server converts video to %s for the Miyoo.", qualities[quality].name);
     text_fit(f13, status, 24, TOP_H + 300, SCREEN_W - 48, st ? C_ACCENT : C_GREY);
 }
 
@@ -2066,13 +2066,13 @@ static void settings_value(int row, char *out, size_t n)
     switch (row) {
     case SET_SERVER:
         if (offline)
-            snprintf(out, n, "Ikke tilkoblet");
+            snprintf(out, n, "Not connected");
         else
             snprintf(out, n, "%s", *server_name ? server_name : server_url);
         break;
     case SET_USER:
-        snprintf(out, n, "%s", offline ? "–" : *token ? (*user_name ? user_name : "Innlogget")
-                                                      : "Ikke innlogget");
+        snprintf(out, n, "%s", offline ? "–" : *token ? (*user_name ? user_name : "Logged in")
+                                                      : "Not logged in");
         break;
     case SET_QUALITY:
         snprintf(out, n, "‹ %s ›", qualities[quality].name);
@@ -2082,21 +2082,21 @@ static void settings_value(int row, char *out, size_t n)
         for (int i = 0; i < dl_n; i++)
             *(dl_list[i].state == 3 ? &done : &waiting) += 1;
         if (waiting)
-            snprintf(out, n, "%d filer · %.0f MB · %d i kø", done, dl_bytes / 1048576.0, waiting);
+            snprintf(out, n, "%d files · %.0f MB · %d queued", done, dl_bytes / 1048576.0, waiting);
         else
-            snprintf(out, n, "%d filer · %.0f MB", done, dl_bytes / 1048576.0);
+            snprintf(out, n, "%d files · %.0f MB", done, dl_bytes / 1048576.0);
         break;
     }
     case SET_ABOUT:
-        snprintf(out, n, "Jellyfin for OnionSoup " APP_VERSION);
+        snprintf(out, n, "Jellyfin for Onion Soup " APP_VERSION);
         break;
     }
 }
 
 static void draw_settings(void)
 {
-    static const char *labels[SET_COUNT] = {"Server", "Bruker", "Videokvalitet", "Nedlastinger", "Slett alle nedlastinger", "Om"};
-    text(f24, "Innstillinger", 24, TOP_H + 12, C_WHITE);
+    static const char *labels[SET_COUNT] = {"Server", "User", "Video quality", "Downloads", "Delete all downloads", "Om"};
+    text(f24, "Settings", 24, TOP_H + 12, C_WHITE);
     for (int i = 0; i < SET_COUNT; i++) {
         int y = TOP_H + 52 + i * 54;
         bool s = i == settings_sel;
@@ -2106,7 +2106,7 @@ static void draw_settings(void)
         bool danger = i == SET_DELETE_ALL;
         const char *label = labels[i];
         if (danger && confirm_pending("all"))
-            label = "Trykk A igjen for å slette alt";
+            label = "Press A again to delete everything";
         text(f19, label, 44, y + 11, danger ? C_RED : (s ? C_WHITE : C_SOFT));
         char val[160];
         settings_value(i, val, sizeof(val));
@@ -2120,7 +2120,7 @@ static void draw_settings(void)
 
 static void draw_servers(void)
 {
-    text(f24, "Servere", 24, TOP_H + 12, C_WHITE);
+    text(f24, "Servers", 24, TOP_H + 12, C_WHITE);
     int rows = account_count + 1;
     int visible = 6;
     int first = servers_sel >= visible ? servers_sel - visible + 1 : 0;
@@ -2137,15 +2137,15 @@ static void draw_servers(void)
             char line[200];
             snprintf(line, sizeof(line), "%s", *a->name ? a->name : "Jellyfin");
             text_fit(f19, line, 44, y + 5, SCREEN_W - 200, C_WHITE);
-            snprintf(line, sizeof(line), "%s%s%s", *a->user_name ? a->user_name : "ikke innlogget", "  ·  ", a->url);
+            snprintf(line, sizeof(line), "%s%s%s", *a->user_name ? a->user_name : "not logged in", "  ·  ", a->url);
             text_fit(f13, line, 44, y + 29, SCREEN_W - 200, C_GREY);
             if (cur)
-                text(f15, "I bruk", SCREEN_W - 44 - text_w(f15, "I bruk"), y + 15, C_GREEN);
+                text(f15, "In use", SCREEN_W - 44 - text_w(f15, "In use"), y + 15, C_GREEN);
             if (s && confirm_pending("server"))
-                text(f15, "Y igjen: fjern", SCREEN_W - 44 - text_w(f15, "Y igjen: fjern"), y + 15, C_RED);
+                text(f15, "Y again: remove", SCREEN_W - 44 - text_w(f15, "Y again: remove"), y + 15, C_RED);
         }
         else
-            text(f19, "Legg til server …", 44, y + 13, s ? C_ACCENT : C_SOFT);
+            text(f19, "Add server …", 44, y + 13, s ? C_ACCENT : C_SOFT);
     }
 }
 
@@ -2242,7 +2242,7 @@ static void use_account(int i)
     account_load(i);
     save_config();
     if (!check_server()) {
-        show_message("Får ikke kontakt med serveren", 3000);
+        show_message("Can't reach the server", 3000);
         return;
     }
     if (*token)
@@ -2300,14 +2300,14 @@ static void on_settings_key(SDLKey key)
             sign_out();
             view_count = 0;
             open_view(-1);
-            show_message("Logget ut", 2000);
+            show_message("Logged out", 2000);
         }
         scr = S_LOGIN;
         quick_connect_start();
     }
     else if (settings_sel == SET_DOWNLOADS) {
         if (dl_count_done() == 0) {
-            show_message(dl_n ? "Ingenting er ferdig nedlastet ennå" : "Ingenting er lastet ned", 2500);
+            show_message(dl_n ? "Nothing has finished downloading yet" : "Nothing is downloaded", 2500);
             return;
         }
         int idx = -1;
@@ -2323,10 +2323,10 @@ static void on_settings_key(SDLKey key)
     }
     else if (settings_sel == SET_DELETE_ALL) {
         if (!dl_n) {
-            show_message("Ingenting å slette", 2000);
+            show_message("Nothing to delete", 2000);
             return;
         }
-        if (!confirm("all", "Trykk A igjen for å slette alle nedlastinger"))
+        if (!confirm("all", "Press A again to delete all downloads"))
             return;
         music_stop();
         bool on_local = depth > 0 && level_is_local(&stack[0]);
@@ -2346,7 +2346,7 @@ static void on_settings_key(SDLKey key)
             else
                 open_view(0);
         }
-        show_message("Alle nedlastinger er slettet", 2500);
+        show_message("All downloads are deleted", 2500);
     }
 }
 
@@ -2370,7 +2370,7 @@ static void on_servers_key(SDLKey key)
         }
     }
     else if (key == SW_BTN_Y && servers_sel < account_count) {
-        if (confirm("server", "Trykk Y igjen for å fjerne serveren"))
+        if (confirm("server", "Press Y again to remove the server"))
             remove_account(servers_sel);
     }
 }
@@ -2380,13 +2380,13 @@ static void delete_selected(Item *it)
     char what[64];
     snprintf(what, sizeof(what), "del:%.50s", it->id);
     char q[200];
-    snprintf(q, sizeof(q), "Trykk Y igjen for å slette «%.120s»", it->name);
+    snprintf(q, sizeof(q), "Press Y again to delete \"%.120s\"", it->name);
     if (!confirm(what, q))
         return;
     if (music_pid > 0 && music_level && music_level == &stack[depth - 1])
         music_stop();
     dl_delete(it);
-    show_message("Slettet", 1500);
+    show_message("Deleted", 1500);
 }
 
 static void on_key(SDLKey key)
@@ -2427,7 +2427,7 @@ static void on_key(SDLKey key)
             if (server_sel < server_count)
                 choose_server(servers[server_sel].address);
             else {
-                const char *addr = launch_keyboard("http://", "Serveradresse");
+                const char *addr = launch_keyboard("http://", "Server address");
                 if (addr && *addr && strcmp(addr, "http://"))
                     choose_server(addr);
             }
@@ -2603,7 +2603,7 @@ int main(void)
     load_config();
     SDL_FillRect(screen, NULL, map(screen, C_BG));
     soup_logo("");
-    text(f24, "Kobler til …", (SCREEN_W - text_w(f24, "Kobler til …")) / 2, 210, C_WHITE);
+    text(f24, "Connecting …", (SCREEN_W - text_w(f24, "Connecting …")) / 2, 210, C_WHITE);
     SDL_BlitSurface(screen, NULL, video, NULL);
     SDL_Flip(video);
 
@@ -2643,7 +2643,7 @@ int main(void)
         poll_images();
         poll_music();
         dl_scan(false);
-        // a download finished: show the "Nedlastet" tab
+        // a download finished: show the "Downloaded" tab
         if (!offline && scr == S_HOME && view_count > 0 && strcmp(views[view_count - 1].collection, "downloads"))
             add_downloads_view();
         draw();

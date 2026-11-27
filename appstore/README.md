@@ -30,7 +30,7 @@ Da bygger workflowen ny pakke, og App Store viser «Oppdater» på enheter som h
 Ved oppdatering byttes appens egne filer ut, mens filer brukeren har laget i `App/<AppId>/` (samples, prosjekter o.l.) beholdes.
 
 Apper fra App Store havner rett i Apps-fanen. Vil du heller at appen legger seg i en gruppe, legger du til
-`"group": "media"` (Medier) eller `"group": "settings"` (Innstillinger) i appens `config.json`.
+`"group": "media"` (Media) eller `"group": "settings"` (Settings) i appens `config.json`.
 Brukeren kan alltid flytte appen selv med SELECT inne i en gruppe. Se `.tmp_update/script/app_groups.sh`.
 
 ## Porter fra Ports-Collection

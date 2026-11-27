@@ -1,5 +1,5 @@
-# Built-in apps and their group in the Apps tab (media = Medier,
-# settings = Innstillinger, top = straight in the Apps tab).
+# Built-in apps and their group in the Apps tab (media = Media,
+# settings = Settings, top = straight in the Apps tab).
 # The user's own moves are kept in config/app_groups and win over this file.
 Gmu=media
 FFplay=media

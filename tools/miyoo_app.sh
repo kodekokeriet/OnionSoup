@@ -22,4 +22,4 @@ echo "Copying to $host..."
 ssh "$user@$host" "cat > /tmp/$app.zip &&
 	mkdir -p /mnt/SDCARD/App/$app && cd /mnt/SDCARD/App/$app && unzip -o -q /tmp/$app.zip &&
 	chmod +x *.sh $(echo $app | tr A-Z a-z) jfplayer 2>/dev/null; rm -f /tmp/$app.zip; sync" < "$work/$app.zip"
-echo "Done. Open Apps > $app on the Miyoo (or Medier if it went into a group)."
+echo "Done. Open Apps > $app on the Miyoo (or Media if it went into a group)."

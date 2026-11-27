@@ -69,9 +69,9 @@ main() {
     cd $sysdir
     bootScreen "Boot"
 
-    # Set filebrowser branding to "Onion" and apply custom theme
+    # Set filebrowser branding to "Onion Soup" and apply custom theme
     if [ -f "$sysdir/config/filebrowser/first.run" ]; then
-        $sysdir/bin/filebrowser config set --branding.name "Onion" -d $sysdir/config/filebrowser/filebrowser.db
+        $sysdir/bin/filebrowser config set --branding.name "Onion Soup" -d $sysdir/config/filebrowser/filebrowser.db
         $sysdir/bin/filebrowser config set --branding.files "$sysdir/config/filebrowser/theme" -d $sysdir/config/filebrowser/filebrowser.db
 
         rm "$sysdir/config/filebrowser/first.run"
@@ -210,6 +210,9 @@ launch_main_ui() {
 
     # Apps tab: hide grouped apps, show the groups and sort the tab
     sh $sysdir/script/app_groups.sh sync --order
+
+    # Game list: shrink new box art so it doesn't cover the game names
+    (nice -n 19 sh $sysdir/script/boxart_fit.sh > /dev/null 2>&1 &)
 
     # Ensure we've mounted the correct MainUI binary
     mount_main_ui

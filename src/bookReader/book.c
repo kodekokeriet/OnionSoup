@@ -528,5 +528,5 @@ void book_chapter_title(Book *b, int index, char *out, size_t n)
     if (best >= 0)
         copy(out, n, b->toc[best].title);
     else
-        snprintf(out, n, "Del %d", index + 1);
+        snprintf(out, n, "Part %d", index + 1);
 }

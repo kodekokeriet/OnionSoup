@@ -1,8 +1,8 @@
 {
     "name": "Jellyfin",
-    "description": "Se filmer og serier og hør musikk fra din egen Jellyfin-server. Finner serveren automatisk på WiFi og logger inn med Quick Connect. Last ned for å se uten nett.",
-    "version": "0.3.0",
-    "author": "OnionSoup",
+    "description": "Watch movies and shows and listen to music from your own Jellyfin server. Finds the server on WiFi by itself and logs in with Quick Connect. Download to watch offline.",
+    "version": "0.3.1",
+    "author": "Onion Soup",
     "category": "Media",
     "devices": ["354"]
 }

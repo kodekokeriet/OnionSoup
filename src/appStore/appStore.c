@@ -6,7 +6,7 @@
 //
 // Long lists scroll up and down only: the small screen makes sideways
 // scrolling hard to follow. Shelves on the front page show a few items and a
-// "Se alle" tile that opens the full list.
+// "See all" tile that opens the full list.
 //
 // Environment overrides for testing on a PC:
 //   SDCARD              SD card root (default /mnt/SDCARD)
@@ -105,7 +105,7 @@ typedef enum { TAB_FEATURED,
                TAB_THEMES,
                TAB_INSTALLED,
                TAB_COUNT } Tab;
-static const char *TAB_NAMES[TAB_COUNT] = {"Utvalgt", "Apper", "Porter", "Temaer", "Installert"};
+static const char *TAB_NAMES[TAB_COUNT] = {"Featured", "Apps", "Ports", "Themes", "Installed"};
 
 // Game Store mode (--games): ports and homebrew games, filtered by the
 // systems this device has emulators for. The App Store keeps apps and themes.
@@ -527,7 +527,7 @@ static int shelf_slots(RowKind row)
     return row == ROW_THEMES ? 4 : 6;
 }
 
-// Items shown on a shelf; the last slot becomes "Se alle" when there are more
+// Items shown on a shelf; the last slot becomes "See all" when there are more
 static int shelf_shown(RowKind row, int n)
 {
     return n <= shelf_slots(row) ? n : shelf_slots(row) - 1;
@@ -645,7 +645,7 @@ static void draw_badge(Item *it, int x, int y, int w)
         return;
     bool update = has_update(it);
     bool in_use = active_variant(it) >= 0;
-    pill(update ? "NY" : (in_use ? "I BRUK" : "OK"), x + w - 5, y + 5, update ? C_ACCENT : C_GREEN,
+    pill(update ? "NEW" : (in_use ? "IN USE" : "OK"), x + w - 5, y + 5, update ? C_ACCENT : C_GREEN,
          update ? C_DARK : C_WHITE);
 }
 
@@ -669,7 +669,7 @@ static void draw_see_all(int n, int x, int y, int w, int h, bool selected)
     if (selected)
         outline_round(x - 5, y - 5, w + 10, h + 10, 12, 3, C_ACCENT, C_BG);
     fill_round(x, y, w, h, 8, C_PANEL);
-    const char *l1 = "Se alle";
+    const char *l1 = "See all";
     char l2[16];
     snprintf(l2, sizeof(l2), "%d", n);
     text(f17, l1, x + (w - text_w(f17, l1)) / 2, y + h / 2 - 22, selected ? C_ACCENT : C_WHITE);
@@ -705,7 +705,7 @@ static void draw_hero(int y0)
         }
     }
     draw_cover(hero, IMG_HERO, 24, y0 + 10);
-    text(f13, "UTVALGT", 172, y0 + 22, C_ACCENT);
+    text(f13, "FEATURED", 172, y0 + 22, C_ACCENT);
     char name[160];
     short_name(it->name, name, sizeof(name));
     text_fit(f34, name, 172, y0 + 38, SCREEN_W - 190, C_WHITE);
@@ -714,7 +714,7 @@ static void draw_hero(int y0)
     human_size(it->size, sz, sizeof(sz));
     snprintf(meta, sizeof(meta), "%s  ·  %s", *it->genre ? it->genre : (*it->system ? it->system : "App"), sz);
     text_fit(f15, meta, 172, y0 + 126, SCREEN_W - 196, C_GREY);
-    const char *btn = *it->installed ? "Installert" : "Installer";
+    const char *btn = *it->installed ? "Installed" : "Install";
     int bw = text_w(f19, btn) + 40;
     if (feat_rows[feat_row] == ROW_HERO)
         outline_round(168, y0 + 150, bw + 8, 44, 22, 3, C_WHITE, C_BG);
@@ -725,7 +725,7 @@ static void draw_hero(int y0)
 static void draw_featured(void)
 {
     if (feat_row_count == 0) {
-        const char *empty = "Ingen spill for dette systemet.";
+        const char *empty = "No games for this system.";
         text(f17, empty, (SCREEN_W - text_w(f17, empty)) / 2, 230, C_GREY);
         return;
     }
@@ -740,7 +740,7 @@ static void draw_featured(void)
     if (feat_row == 0)
         scroll = 0;
 
-    const char *titles[] = {"", "Gratis porter", "Populære temaer", games ? "Homebrew" : "Apper"};
+    const char *titles[] = {"", "Free ports", "Popular themes", games ? "Homebrew" : "Apps"};
     int y = TOP_H - scroll;
     for (int r = 0; r < feat_row_count; r++) {
         RowKind row = feat_rows[r];
@@ -796,7 +796,7 @@ static void draw_list_header(const char *title, int n, int pos)
         char where[48];
         Item *it = &items[pos];
         char letter[2] = {(char)toupper((unsigned char)it->name[0]), 0};
-        snprintf(where, sizeof(where), "%s  ·  %d av %d", letter, sel[tab] + 1, n);
+        snprintf(where, sizeof(where), "%s  ·  %d of %d", letter, sel[tab] + 1, n);
         text(f15, where, SCREEN_W - 24 - text_w(f15, where), TOP_H + 12, C_GREY);
     }
 }
@@ -806,9 +806,9 @@ static void meta_line(Item *it, char *out, size_t n)
     char sz[32];
     human_size(it->size, sz, sizeof(sz));
     const char *what = it->kind == KIND_APP ? "App"
-                       : is_theme(it)       ? (it->variant_count > 1 ? "Temapakke" : "Tema")
-                       : it->needs_files    ? "Egne spillfiler"
-                                            : "Gratis";
+                       : is_theme(it)       ? (it->variant_count > 1 ? "Theme pack" : "Theme")
+                       : it->needs_files    ? "Own game files"
+                                            : "Free";
     char extra[64] = "";
     if (*it->genre)
         snprintf(extra, sizeof(extra), "  ·  %s", it->genre);
@@ -839,7 +839,7 @@ static void draw_list(int *list, int n)
         int right = SCREEN_W - 34;
         if (*it->installed) {
             bool update = has_update(it);
-            const char *label = update ? "Oppdatering" : (active_variant(it) >= 0 ? "I bruk" : "Installert");
+            const char *label = update ? "Update" : (active_variant(it) >= 0 ? "In use" : "Installed");
             pill(label, right - 10, y + 17, update ? C_ACCENT : C_GREEN, update ? C_DARK : C_WHITE);
             right -= text_w(f13, label) + 34;
         }
@@ -909,7 +909,7 @@ static void draw_tab_list(void)
         copy_str(title, sizeof(title), tab_name(tab));
     draw_list_header(title, n, n ? list[sel[tab]] : 0);
     if (n == 0) {
-        const char *empty = tab == TAB_INSTALLED ? (games ? "Ingenting installert fra Game Store ennå." : "Ingenting installert fra App Store ennå.") : "Ingenting her ennå.";
+        const char *empty = tab == TAB_INSTALLED ? (games ? "Nothing installed from the Game Store yet." : "Nothing installed from the App Store yet.") : "Nothing here yet.";
         text(f17, empty, (SCREEN_W - text_w(f17, empty)) / 2, 230, C_GREY);
         return;
     }
@@ -949,9 +949,9 @@ static void draw_detail(void)
     // chips
     char sz[32];
     human_size(it->size, sz, sizeof(sz));
-    const char *kind = it->kind == KIND_APP ? "App" : theme         ? "Tema"
-                                                  : it->needs_files ? "Egne spillfiler"
-                                                                    : "Gratis";
+    const char *kind = it->kind == KIND_APP ? "App" : theme         ? "Theme"
+                                                  : it->needs_files ? "Own game files"
+                                                                    : "Free";
     const char *chips[3] = {kind, *it->genre ? it->genre : NULL, sz};
     int cx = x;
     for (int i = 0; i < 3; i++) {
@@ -977,7 +977,7 @@ static void draw_detail(void)
         snprintf(line, sizeof(line), "‹  %s  ›", v);
         text(f13, "VARIANT", x, TOP_H + 168, C_ACCENT);
         char pos[32];
-        snprintf(pos, sizeof(pos), "%d av %d", variant + 1, it->variant_count);
+        snprintf(pos, sizeof(pos), "%d of %d", variant + 1, it->variant_count);
         text(f13, pos, x + w - text_w(f13, pos), TOP_H + 168, C_GREY);
         fill_round(x, TOP_H + 186, w, 28, 14, C_CARD);
         text_fit(f15, line, x + 12, TOP_H + 189, w - 24, C_WHITE);
@@ -995,33 +995,33 @@ static void draw_detail(void)
             fill_round(x, by_, bar, 36, 18, C_ACCENT);
         char line[160];
         if (!strcmp(state, "download"))
-            snprintf(line, sizeof(line), "Laster ned … %d %%", pct);
+            snprintf(line, sizeof(line), "Downloading … %d %%", pct);
         else if (!strcmp(state, "verify"))
-            snprintf(line, sizeof(line), "Sjekker filen …");
+            snprintf(line, sizeof(line), "Checking the file …");
         else if (!strcmp(job_kind, "remove"))
-            snprintf(line, sizeof(line), "Fjerner …");
+            snprintf(line, sizeof(line), "Removing …");
         else if (!strcmp(job_kind, "apply"))
-            snprintf(line, sizeof(line), "Bytter tema …");
+            snprintf(line, sizeof(line), "Switching theme …");
         else
-            snprintf(line, sizeof(line), "Installerer …");
+            snprintf(line, sizeof(line), "Installing …");
         text(f17, line, x + 14, by_ + 7, !strcmp(state, "download") && bar > 120 ? C_DARK : C_WHITE);
     }
     else {
         const char *label;
         SDL_Color bg = C_ACCENT, fg = C_DARK;
         if (!*it->installed)
-            label = "Installer";
+            label = "Install";
         else if (has_update(it))
-            label = "Oppdater";
+            label = "Update";
         else if (theme && in_use == variant) {
-            label = "I bruk";
+            label = "In use";
             bg = C_GREEN;
             fg = C_WHITE;
         }
         else if (theme)
-            label = "Bruk temaet";
+            label = "Use theme";
         else {
-            label = "Installert";
+            label = "Installed";
             bg = C_GREEN;
             fg = C_WHITE;
         }
@@ -1034,19 +1034,19 @@ static void draw_detail(void)
         foot_y = TOP_H + 290;
     if (!theme) {
         char foot[200];
-        snprintf(foot, sizeof(foot), "Versjon %s%s%s", it->version, *it->installed ? "  ·  installert " : "",
+        snprintf(foot, sizeof(foot), "Version %s%s%s", it->version, *it->installed ? "  ·  installed " : "",
                  *it->installed ? it->installed : "");
         text_fit(f13, foot, 24, foot_y, SCREEN_W - 48, C_GREY);
     }
     const char *note = NULL;
     if (it->kind == KIND_PORT)
-        note = it->needs_files ? "Legg inn originale spillfiler, se _required_files.txt i Roms/PORTS/Games."
-                               : "Krever «Ports Collection» i Package Manager. Kjør «~Import ports» etterpå.";
+        note = it->needs_files ? "Add the original game files, see _required_files.txt in Roms/PORTS/Games."
+                               : "Needs \"Ports Collection\" in Package Manager. Run \"~Import ports\" afterwards.";
     else if (it->kind == KIND_GAME)
-        note = it->needs_files ? "Rom hack: krever din egen original-ROM (ikke zippet) i Roms-mappen for systemet."
-                               : "Gratis homebrew. Lagres i Roms-mappen for systemet.";
+        note = it->needs_files ? "Rom hack: needs your own original ROM (not zipped) in the system's Roms folder."
+                               : "Free homebrew. Saved in the system's Roms folder.";
     else if (theme)
-        note = "Fra OnionUI/Themes. Temaet kan også velges senere under Themes i Innstillinger.";
+        note = "From OnionUI/Themes. You can also pick the theme later under Themes in Settings.";
     if (note)
         text_fit(f13, note, 24, foot_y + (theme ? 0 : 22), SCREEN_W - 48, C_GREY);
 }
@@ -1081,41 +1081,41 @@ static void draw(void)
         const char *k[4], *l[4];
         int n = 0;
         if (job_pid > 0) {
-            k[n] = "B", l[n++] = "Tilbake";
+            k[n] = "B", l[n++] = "Back";
         }
         else {
             if (!*it->installed)
-                k[n] = "A", l[n++] = "Installer";
+                k[n] = "A", l[n++] = "Install";
             else if (has_update(it))
-                k[n] = "A", l[n++] = "Oppdater";
+                k[n] = "A", l[n++] = "Update";
             else if (is_theme(it)) {
                 if (active_variant(it) != variant)
-                    k[n] = "A", l[n++] = "Bruk";
+                    k[n] = "A", l[n++] = "Use";
             }
             else
-                k[n] = "A", l[n++] = "Installer på nytt";
+                k[n] = "A", l[n++] = "Reinstall";
             if (*it->installed)
-                k[n] = "Y", l[n++] = "Fjern";
+                k[n] = "Y", l[n++] = "Remove";
             if (pack)
                 k[n] = "←→", l[n++] = "Variant";
-            k[n] = "B", l[n++] = "Tilbake";
+            k[n] = "B", l[n++] = "Back";
         }
         draw_hints(k, l, n);
     }
     else if (tab == TAB_FEATURED) {
         const char *k[] = {"A", "L/R", "SELECT", "B"};
-        const char *l[] = {"Åpne", "Fane", "System", "Avslutt"};
+        const char *l[] = {"Open", "Tab", "System", "Exit"};
         if (!games)
-            k[2] = "B", l[2] = "Avslutt";
+            k[2] = "B", l[2] = "Exit";
         draw_hints(k, l, games ? 4 : 3);
     }
     else {
         const char *k[] = {"A", "←→", "L2/R2", "L/R", "SELECT", "B"};
-        const char *l[] = {"Åpne", tab_is_grid(tab) ? "Flytt" : "Side", "Bokstav", "Fane", "System", "Avslutt"};
+        const char *l[] = {"Open", tab_is_grid(tab) ? "Move" : "Page", "Letter", "Tab", "System", "Exit"};
         if (games)
             k[4] = "SELECT", l[4] = "System";
         else
-            k[4] = "B", l[4] = "Avslutt";
+            k[4] = "B", l[4] = "Exit";
         draw_hints(k, l, games ? 6 : 5);
     }
     draw_message();
@@ -1185,7 +1185,7 @@ static void on_key_detail(SDLKey key)
     }
     else if (key == SW_BTN_Y && *it->installed) {
         if (active_variant(it) >= 0)
-            show_message("Temaet er i bruk. Bytt til et annet tema først.", 3500);
+            show_message("This theme is in use. Switch to another theme first.", 3500);
         else
             start_job("remove", detail, NULL);
     }
@@ -1216,7 +1216,7 @@ static void on_key_featured(SDLKey key)
             open_detail(hero);
         else if (feat_col < shelf_shown(row, n))
             open_detail(list[feat_col]);
-        else { // "Se alle"
+        else { // "See all"
             tab = shelf_tab(row);
             sel[tab] = top[tab] = 0;
         }
@@ -1273,7 +1273,7 @@ static void on_key(SDLKey key)
             sel[t] = top[t] = 0;
         feat_row = feat_col = 0;
         build_feat_rows();
-        show_message(sys_filter < 0 ? "Alle systemer" : systems[sys_filter], 1200);
+        show_message(sys_filter < 0 ? "All systems" : systems[sys_filter], 1200);
         return;
     }
     if (tab == TAB_FEATURED)
@@ -1359,15 +1359,15 @@ static void job_finished(int code)
     int pct;
     parse_status(state, &pct, txt, sizeof(txt));
     if (code != 0)
-        show_message(*txt ? txt : "Noe gikk galt", 4000);
+        show_message(*txt ? txt : "Something went wrong", 4000);
     else if (!strcmp(job_kind, "remove"))
-        show_message("Fjernet", 2500);
+        show_message("Removed", 2500);
     else if (!strcmp(job_kind, "apply"))
-        show_message("Temaet er byttet. Avslutt for å se det.", 4000);
+        show_message("Theme switched. Exit to see it.", 4000);
     else if (is_theme(it))
-        show_message("Installert! Trykk A for å bruke temaet.", 3500);
+        show_message("Installed! Press A to use the theme.", 3500);
     else
-        show_message("Installert!", 2500);
+        show_message("Installed!", 2500);
 }
 
 int main(int argc, char *argv[])
@@ -1410,7 +1410,7 @@ int main(int argc, char *argv[])
     int dots = 0;
     while (!poll_job(&code)) {
         char line[32];
-        snprintf(line, sizeof(line), "Kobler til%.*s", (dots++ / 4) % 4, "...");
+        snprintf(line, sizeof(line), "Connecting%.*s", (dots++ / 4) % 4, "...");
         draw_center(line, NULL, C_WHITE);
         SDL_Event e;
         while (SDL_PollEvent(&e))
@@ -1425,7 +1425,7 @@ int main(int argc, char *argv[])
         char state[32], txt[200];
         int pct;
         parse_status(state, &pct, txt, sizeof(txt));
-        draw_center("Kunne ikke laste App Store", *txt ? txt : "Sjekk WiFi-tilkoblingen og prøv igjen.", C_RED);
+        draw_center("Could not load the App Store", *txt ? txt : "Check the WiFi connection and try again.", C_RED);
         if (script_pos) {
             while (run_script_step())
                 SDL_Delay(10);

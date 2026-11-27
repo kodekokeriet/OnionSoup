@@ -424,13 +424,13 @@ static int decoder_main(void *ud)
     if (avformat_open_input(&fmt, url, NULL, &opts) < 0) {
         DBG("open failed\n");
         av_dict_free(&opts);
-        copy_str(dec_error, sizeof(dec_error), "Kunne ikke åpne videoen fra serveren.");
+        copy_str(dec_error, sizeof(dec_error), "Could not open the video from the server.");
         dec_failed = true;
         return 0;
     }
     av_dict_free(&opts);
     if (avformat_find_stream_info(fmt, NULL) < 0 && !abort_dec) {
-        copy_str(dec_error, sizeof(dec_error), "Fant ikke video i strømmen.");
+        copy_str(dec_error, sizeof(dec_error), "No video found in the stream.");
         dec_failed = true;
         avformat_close_input(&fmt);
         return 0;
@@ -462,7 +462,7 @@ static int decoder_main(void *ud)
             actx = NULL;
     }
     if (!vctx && !actx) {
-        copy_str(dec_error, sizeof(dec_error), "Videoformatet støttes ikke.");
+        copy_str(dec_error, sizeof(dec_error), "This video format is not supported.");
         dec_failed = true;
         avformat_close_input(&fmt);
         return 0;
@@ -675,12 +675,12 @@ static void draw_osd(double pos, bool buffering)
     text(f17, a, 50, y + 12, seek_target >= 0 ? C_ACCENT : C_WHITE);
     text(f17, b, SCREEN_W - 16 - text_w(f17, b), y + 12, C_GREY);
     if (buffering)
-        text(f15, "Laster …", (SCREEN_W - text_w(f15, "Laster …")) / 2, y + 13, C_GREY);
+        text(f15, "Loading …", (SCREEN_W - text_w(f15, "Loading …")) / 2, y + 13, C_GREY);
     else if (sub_sel >= 0 || audio_sel >= 0) {
         char info[160] = "";
         for (int i = 0; i < n_sub; i++)
             if (subs[i].index == sub_sel)
-                snprintf(info, sizeof(info), "Tekst: %s", subs[i].name);
+                snprintf(info, sizeof(info), "Subtitles: %s", subs[i].name);
         int iw = text_w(f13, info);
         if (iw > 300)
             iw = 300;
@@ -702,7 +702,7 @@ static void draw_osd(double pos, bool buffering)
     }
 
     const char *keys[] = {"A", "←→", "L/R", "X", "Y", "B"};
-    const char *labels[] = {paused ? "Spill" : "Pause", "10 s", "1 min", "Tekst", "Lyd", "Stopp"};
+    const char *labels[] = {paused ? "Play" : "Pause", "10 s", "1 min", "Subtitles", "Audio", "Stop"};
     int x = 16;
     for (int i = 0; i < 6; i++) {
         if (local_mode && (i == 3 || i == 4))
@@ -723,7 +723,7 @@ static void draw_menu(void)
     int rows = n > 8 ? 8 : n;
     int w = 380, h = 64 + rows * 34, x = (SCREEN_W - w) / 2, y = (SCREEN_H - h) / 2 - 20;
     fill_round(x, y, w, h, 14, C_BG);
-    text(f19, is_sub ? "Undertekster" : "Lydspor", x + 20, y + 14, C_WHITE);
+    text(f19, is_sub ? "Subtitles" : "Audio track", x + 20, y + 14, C_WHITE);
     int top = menu_sel - rows + 1 > 0 ? menu_sel - rows + 1 : 0;
     for (int r = 0; r < rows; r++) {
         int i = top + r;
@@ -732,7 +732,7 @@ static void draw_menu(void)
         const char *name;
         int idx;
         if (is_sub) {
-            name = i == 0 ? "Av" : subs[i - 1].name;
+            name = i == 0 ? "Off" : subs[i - 1].name;
             idx = i == 0 ? -1 : subs[i - 1].index;
         }
         else {
@@ -759,13 +759,13 @@ static void draw(double pos)
         SDL_BlitSurface(cur_frame, NULL, screen, &r);
     }
     if (dec_failed) {
-        text(f24, "Avspillingen stoppet", (SCREEN_W - text_w(f24, "Avspillingen stoppet")) / 2, 190, C_WHITE);
+        text(f24, "Playback stopped", (SCREEN_W - text_w(f24, "Playback stopped")) / 2, 190, C_WHITE);
         text(f15, dec_error, (SCREEN_W - text_w(f15, dec_error)) / 2, 230, C_GREY);
-        text(f15, "Trykk A for å prøve igjen, B for å gå tilbake.",
-             (SCREEN_W - text_w(f15, "Trykk A for å prøve igjen, B for å gå tilbake.")) / 2, 260, C_GREY);
+        text(f15, "Press A to try again, B to go back.",
+             (SCREEN_W - text_w(f15, "Press A to try again, B to go back.")) / 2, 260, C_GREY);
     }
     else if (!cur_frame) {
-        text(f24, "Laster …", (SCREEN_W - text_w(f24, "Laster …")) / 2, 200, C_WHITE);
+        text(f24, "Loading …", (SCREEN_W - text_w(f24, "Loading …")) / 2, 200, C_WHITE);
         text_fit(f15, title, (SCREEN_W - text_w(f15, title)) / 2 > 20 ? (SCREEN_W - text_w(f15, title)) / 2 : 20,
                  240, SCREEN_W - 40, C_GREY);
     }

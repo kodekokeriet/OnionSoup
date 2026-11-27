@@ -1,8 +1,8 @@
 {
     "name": "YouTube",
-    "description": "Se YouTube på Miyoo-en: populære videoer, søk, historikk og nedlasting for å se uten nett. Går via Invidious, så du trenger ingen konto. Videoene spilles i 360p.",
-    "version": "0.1.1",
-    "author": "OnionSoup",
+    "description": "Watch YouTube on the Miyoo: popular videos, search, history and downloads to watch offline. Goes through Invidious, so no account needed. Videos play in 360p.",
+    "version": "0.1.2",
+    "author": "Onion Soup",
     "category": "Media",
     "devices": ["354"]
 }

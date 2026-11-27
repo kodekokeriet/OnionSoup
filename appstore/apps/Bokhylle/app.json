@@ -1,8 +1,8 @@
 {
-    "name": "Bokhylle",
-    "description": "Ebokleser med bokhylle. Viser bøkene dine i Media/Books med omslag, husker hvor du er, og leser EPUB og TXT med valg av skrift, størrelse og tema. Erstatter PixelReader.",
-    "version": "1.0.0",
-    "author": "OnionSoup",
+    "name": "Bookshelf",
+    "description": "E-book reader with a bookshelf. Shows your books in Media/Books with covers, remembers where you are, and reads EPUB and TXT with your choice of font, size and theme. Replaces PixelReader.",
+    "version": "1.0.1",
+    "author": "Onion Soup",
     "category": "Media",
     "devices": ["283", "354"]
 }

@@ -2,5 +2,5 @@
 "label":"Jellyfin",
 "icon":"icon.png",
 "launch":"launch.sh",
-"description":"Film, serier og musikk fra Jellyfin"
+"description":"Movies, shows and music from Jellyfin"
 }
