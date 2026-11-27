@@ -6,12 +6,18 @@ on:
     branches:
       - main
     paths-ignore:
-      - '**/README.md'
+      - '**/*.md'
       - 'website/**'
+      - 'tools/**'
   pull_request:
     paths-ignore:
-      - '**/README.md'
+      - '**/*.md'
       - 'website/**'
+      - 'tools/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:

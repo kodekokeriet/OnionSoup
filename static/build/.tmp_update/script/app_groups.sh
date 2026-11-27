@@ -278,10 +278,23 @@ restore_interrupted_order
 
 case "$1" in
     sync)
+        # Runs on every MainUI launch: skip the work when no app, config or
+        # group setting changed since the last sync (one find instead of
+        # hundreds of sed/awk calls)
+        stamp=/tmp/app_groups_synced$2
+        if [ -f $stamp ]; then
+            changed=$(find "$appdir" -maxdepth 2 \( -type d -o -name 'config*.json' \) -newer $stamp 2> /dev/null |
+                head -n 1) || changed=x
+            [ -z "$changed" ] && for f in "$user_conf" "$default_conf"; do
+                [ "$f" -nt $stamp ] && changed=x
+            done
+            [ -z "$changed" ] && exit 0
+        fi
         sync_groups
         if [ "$2" = "--order" ]; then
             sort_apps_tab
         fi
+        touch $stamp
         ;;
     open) open_group "$2" ;;
     move) set_group "$2" "$3" ;;

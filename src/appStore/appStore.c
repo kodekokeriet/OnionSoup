@@ -294,19 +294,42 @@ static void request_image(int idx)
         return; // one download at a time; retried next frame
     it->img_state = 1;
     img_item = idx;
-    img_pid = spawn("image", it->id, NULL);
+    // curl straight away: going through appstore.sh would start a shell and
+    // parse the whole catalog with jq for every cover
+    char tmp[520];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    snprintf(path, sizeof(path), "%s/img", workdir);
+    mkdir(path, 0755);
+    img_pid = fork();
+    if (img_pid == 0) {
+        int devnull = open("/dev/null", 1);
+        if (devnull >= 0) {
+            dup2(devnull, 1);
+            dup2(devnull, 2);
+        }
+        execlp("curl", "curl", "-k", "-L", "-f", "-s", "--connect-timeout", "5", "--max-time", "20", "-o", tmp, it->image, (char *)NULL);
+        _exit(127);
+    }
 }
 
-static void poll_image_job(void)
+// true when a download finished (the screen needs a redraw)
+static bool poll_image_job(void)
 {
     if (img_pid <= 0)
-        return;
+        return false;
     int status;
-    if (waitpid(img_pid, &status, WNOHANG) == img_pid) {
-        img_pid = 0;
-        items[img_item].img_state = WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 2 : 3;
-        img_item = -1;
-    }
+    if (waitpid(img_pid, &status, WNOHANG) != img_pid)
+        return false;
+    img_pid = 0;
+    char path[512], tmp[520];
+    snprintf(path, sizeof(path), "%s/img/%s.png", workdir, items[img_item].id);
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    bool ok = WIFEXITED(status) && WEXITSTATUS(status) == 0 && rename(tmp, path) == 0;
+    if (!ok)
+        remove(tmp);
+    items[img_item].img_state = ok ? 2 : 3;
+    img_item = -1;
+    return true;
 }
 
 // Scaled picture of an item, or NULL while it is not available
@@ -1440,23 +1463,37 @@ int main(int argc, char *argv[])
     }
     build_feat_rows();
 
+    // Redraw right away after input or finished work, otherwise only a few
+    // times a second: a full redraw every frame keeps the CPU busy and slows
+    // down downloads and installs running in the background
+    Uint32 last_draw = 0;
     while (!quit) {
+        bool dirty = false;
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT)
                 quit = true;
-            else if (e.type == SDL_KEYDOWN && !script_pos)
+            else if (e.type == SDL_KEYDOWN && !script_pos) {
                 on_key(e.key.keysym.sym);
+                dirty = true;
+            }
         }
-        run_script_step();
+        if (run_script_step())
+            dirty = true;
 
         if (poll_job(&code)) {
             job_finished(code);
             job_item = -1;
+            dirty = true;
         }
-        poll_image_job();
-        draw();
-        SDL_Delay(30);
+        if (poll_image_job())
+            dirty = true;
+        Uint32 now = SDL_GetTicks();
+        if (dirty || now - last_draw >= 200) {
+            draw();
+            last_draw = now;
+        }
+        SDL_Delay(20);
     }
 
 done:
