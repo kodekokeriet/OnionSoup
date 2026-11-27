@@ -19,7 +19,7 @@ Onion is an enhanced operating system for the Miyoo Mini and Mini+, with fine-tu
 - **Native apps** (installed from the App Store, no emulator needed):
   - **Jellyfin**: browse and play movies, shows and music from your own Jellyfin server, with downloads for offline viewing.
   - **Bookshelf**: an e-book reader for EPUB and TXT with a cover shelf, replacing PixelReader.
-  - **YouTube**: popular videos, search and history through Invidious, no account needed.
+  - **YouTube**: popular videos, search and history through Invidious and Piped, no account needed.
   - **MiiPC**: a sample-based groovebox with pads, sequencer, song mode, mixer and effects.
 - **Tidier Apps tab**: built-in apps are sorted into **Media** and **Settings** groups, and you can move any app between groups.
 - **New default theme**: a warm recolor of Silky by DiMo.

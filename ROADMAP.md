@@ -5,7 +5,6 @@ What is shipped is listed in [CHANGELOG.md](CHANGELOG.md). This page lists work 
 ## In progress
 
 - **Battery life**: an idle mode in the Onion Soup apps, CPU back to normal speed after video playback, and WiFi turned off again when the App Store is closed.
-- **YouTube 0.2.0**: check that a stream really is video before playing it, Piped as a fallback when Invidious servers fail, and a simpler app without the download feature.
 - **SSH host keys** kept across full updates, so SSH clients do not warn about a changed key after updating.
 
 ## Planned

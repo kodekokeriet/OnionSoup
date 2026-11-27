@@ -25,7 +25,7 @@ All notable changes to Onion Soup are listed here. Onion Soup is a fork of [Onio
 #### Apps (installed from the App Store)
 - **Jellyfin** (Mini+): finds Jellyfin servers on the local network and signs in with Quick Connect or user name and password. Browse libraries as poster grids and lists, play music in the background, and play video in its own player with seeking, subtitles and audio track selection. Playback progress is reported back to the server. Movies, episodes and music can be downloaded (transcoded for the Miyoo) to watch offline. No server address is built in.
 - **Bookshelf**: e-book reader for EPUB and TXT. Shows the books in `Media/Books` on a shelf with covers, remembers where you are in each book, and has settings for text size, font, theme (Dark, Sepia, Light, Night), line spacing, margins and justification. Replaces PixelReader.
-- **YouTube** (Mini+): popular videos, search, history and downloads for offline viewing, through Invidious (no account needed). Videos play in 360p while they download. SELECT switches to the next Invidious server.
+- **YouTube** (Mini+): popular videos, search and history through Invidious and Piped servers (no account needed). Videos play in 360p while they load, and each stream is checked to be real video before it plays.
 - **MiiPC**: sample-based groovebox. 16 pads (4 banks on A/B/X/Y), chopping, linear sequencer with live recording, song mode, grid editor, mixer with per-channel effects, master effects, sample editing, resampling and WAV export, undo/redo and projects with autosave. Loads WAV files from the SD card and runs on all Miyoo Mini models. See [src/miipc/README.md](src/miipc/README.md).
 - **Hello Soup**: a small example app that shows how App Store apps are packaged.
 
@@ -59,4 +59,4 @@ All notable changes to Onion Soup are listed here. Onion Soup is a fork of [Onio
 
 ### Known limitations
 - WiFi features (App Store and Game Store downloads, Jellyfin, YouTube) need a Miyoo Mini+. On the Miyoo Mini, app folders can be copied to `App/` on the SD card by hand.
-- YouTube depends on public Invidious servers. Many of them currently do not serve video streams, so playback can fail depending on which servers are available.
+- YouTube depends on public Invidious and Piped servers. Many of them currently do not serve video streams, so playback can fail depending on which servers are available.
